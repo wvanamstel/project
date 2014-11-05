@@ -27,6 +27,13 @@ def read_data(filename, explore=False):
     for bot in bots:
         df = df[df.a_actor_attributes_login!=bot]
 
+    #convert date/time cols into a datetime object
+    df.a_created_at =  pd.to_datetime(df.a_created_at)
+    df.a_repository_created_at = pd.to_datetime(df.a_repository_created_at)
+
+    #convert True/False and NA ---> 1 and 0
+    df['a_payload_pull_request_merged'] = df['a_payload_pull_request_merged'].apply(lambda x: 1 if x==True else 0)
+    df['a_payload_commit_flag'] = df['a_payload_commit_flag'].apply(lambda x: 1 if x==True else 0)
 
     #print out some properties of the dataframe
     if explore:
@@ -45,17 +52,32 @@ def plot_pull_requests_merged(df, users):
     for usr in users:
         temp['timestamp'] = df[df.a_actor_attributes_login==usr].a_created_at
         temp['merged_request'] = df[df.a_actor_attributes_login==usr].a_payload_pull_request_merged
-        temp['timestamp'] = pd.to_datetime(temp['timestamp'])
         temp.sort('timestamp', inplace=True)
-        temp.merged_request[temp.merged_request!=True] = 0
-        temp.merged_request[temp.merged_request==True] = 1
         #temp['merged_request'] = temp['merged_request'].cumsum()
 
+        #construct a time series object
         ts = pd.Series(temp.merged_request.values, index=temp.timestamp)
         ts_res = ts.resample('W', how='sum')
         ts_res.plot()
 
     return None
+
+def make_experts(df):
+    users = df.a_actor_attributes_login.unique()
+    metrics={}
+    for usr in users:
+        temp = df[df.a_actor_attributes_login==usr]
+        temp.sort('a_created_at', inplace=True)
+        temp = temp.set_index('a_created_at')
+        weekly_pulls = np.mean(temp['a_payload_pull_request_merged'].resample('W', how='sum'))
+        weekly_commits = np.mean(temp['a_payload_commit_flag'].resample('W', how='sum'))
+
+        metrics['usr']['weekly_pulls'] = weekly_pulls
+        metrics['usr']['weekly_commits'] = weekly_commits
+
+    return metrics
+
+
 
 if __name__ == '__main__':
     #connect_to_mongoDB()
