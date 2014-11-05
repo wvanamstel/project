@@ -1,0 +1,15 @@
+#user with most followers:
+SELECT user_id, COUNT(follower_id) AS cnt FROM followers GROUP BY user_id ORDER BY cnt DESC LIMIT 75;
+
+
+#With Google bigquery:
+SELECT a.repository_url, a.repository_created_at, a.repository_forks, a.repository_size, a.repository_owner, a.repository_watchers, a.repository_language, a.actor_attributes_login, a.actor_attributes_location, a.created_at, a.payload_pull_request_merged, a.payload_pull_request_id, a.payload_commit_id, a.payload_commit_flag
+FROM [githubarchive:github.timeline] a
+JOIN (SELECT actor_attributes_login, count(actor_attributes_login) AS cnt 
+  FROM [githubarchive:github.timeline] 
+  WHERE payload_pull_request_merged='true'
+  GROUP EACH BY actor_attributes_login 
+  ORDER BY cnt 
+  DESC LIMIT 25) b
+ ON a.actor_attributes_login = b.actor_attributes_login
+ ORDER BY b.actor_attributes_login;
