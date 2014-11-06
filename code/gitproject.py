@@ -48,38 +48,44 @@ def read_data(filename, explore=False):
 
 def plot_pull_requests_merged(df, users):
     #plots weekly merged pull requests
-    temp=pd.DataFrame()
-    for usr in users:
-        temp['timestamp'] = df[df.a_actor_attributes_login==usr].a_created_at
-        temp['merged_request'] = df[df.a_actor_attributes_login==usr].a_payload_pull_request_merged
-        temp.sort('timestamp', inplace=True)
-        #temp['merged_request'] = temp['merged_request'].cumsum()
+    temp = pd.DataFrame()
+    fig = plt.figure()
+    temp['timestamp'] = df[df.a_actor_attributes_login==usr].a_created_at
+    temp['merged_request'] = df[df.a_actor_attributes_login==usr].a_payload_pull_request_merged
+    temp.sort('timestamp', inplace=True)
 
-        #construct a time series object
-        ts = pd.Series(temp.merged_request.values, index=temp.timestamp)
-        ts_res = ts.resample('W', how='sum')
-        ts_res.plot()
+    #construct a time series object
+    ts = pd.Series(temp.merged_request.values, index=temp.timestamp)
+    ts_res = ts.resample('W', how='sum')
+    ts_res.plot()
 
     return None
 
-def make_experts(df):
+def build_features(df):
+    #select and engineer features
     users = df.a_actor_attributes_login.unique()
     metrics={}
     for usr in users:
+        #prep data
         temp = df[df.a_actor_attributes_login==usr]
         temp.sort('a_created_at', inplace=True)
         temp = temp.set_index('a_created_at')
+
+        #get features
         weekly_pulls = np.mean(temp['a_payload_pull_request_merged'].resample('W', how='sum'))
         weekly_commits = np.mean(temp['a_payload_commit_flag'].resample('W', how='sum'))
+        lang_list = [x for x in list(temp['a_repository_language'].unique()) if str(x) != 'nan']
 
-        metrics['usr']['weekly_pulls'] = weekly_pulls
-        metrics['usr']['weekly_commits'] = weekly_commits
+        metrics[usr] = {}
+        metrics[usr]['weekly_pulls'] = weekly_pulls
+        metrics[usr]['weekly_commits'] = weekly_commits
+        metrics[usr]['languages'] = lang_list
 
     return metrics
-
 
 
 if __name__ == '__main__':
     #connect_to_mongoDB()
     df_experts = read_data('data/experts.csv')
+    features = build_features(df_experts)
     
