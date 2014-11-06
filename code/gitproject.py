@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pylab as plt
 import pymongo
 import subprocess
+import requests
+import json
 
 def connect_to_mongoDB():
     #set up SSH tunnel to remote server
@@ -74,7 +76,11 @@ def build_features(df):
         #get features
         weekly_pulls = np.mean(temp['a_payload_pull_request_merged'].resample('W', how='sum'))
         weekly_commits = np.mean(temp['a_payload_commit_flag'].resample('W', how='sum'))
-        lang_list = [x for x in list(temp['a_repository_language'].unique()) if str(x) != 'nan']
+        lang_list = [x for x in list(temp['a_repository_language'].unique()) if str(x)!='nan']
+
+        #urls and cumul number of unique repos owned or forked by user
+        repos_url = temp[temp['a_repository_owner'] == usr].a_repository_url.unique()
+        repos_url = repos_url.shape[0]
 
         metrics[usr] = {}
         metrics[usr]['weekly_pulls'] = weekly_pulls
@@ -83,6 +89,13 @@ def build_features(df):
 
     return metrics
 
+
+def get_github_api(user):
+    base_url = 'https://api.github.com/users/'
+    url = base_url + user
+    r = requests.get(url)
+    assert r.status_code == 200
+    print r.json()
 
 if __name__ == '__main__':
     #connect_to_mongoDB()
