@@ -6,6 +6,7 @@ import subprocess
 import requests
 import json
 
+
 def connect_to_mongoDB():
     #set up SSH tunnel to remote server
     subprocess.Popen('ssh -L 27017:dutihr.st.ewi.tudelft.nl:27017 ghtorrent@dutihr.st.ewi.tudelft.nl', 
@@ -19,6 +20,7 @@ def connect_to_mongoDB():
     #connect to collection 'issues'
     collection = db.issues
     collection.find_one()
+
 
 def read_data(filename, explore=False):
     #read in data from csv file, exported github archive sql query
@@ -48,6 +50,7 @@ def read_data(filename, explore=False):
 
     return df
 
+
 def plot_pull_requests_merged(df, users):
     #plots weekly merged pull requests
     temp = pd.DataFrame()
@@ -63,7 +66,8 @@ def plot_pull_requests_merged(df, users):
 
     return None
 
-def build_features(df):
+
+def build_features(df, pwd):
     #select and engineer features
     users = df.a_actor_attributes_login.unique()
     metrics={}
@@ -86,16 +90,44 @@ def build_features(df):
         metrics[usr]['weekly_pulls'] = weekly_pulls
         metrics[usr]['weekly_commits'] = weekly_commits
         metrics[usr]['languages'] = lang_list
+        metrics[usr]['num_followers'] = num_followers
+        metrics[usr]['num_repos'] = num_repos
 
     return metrics
 
 
-def get_github_api(user):
+def get_followers(user, pwd):
     base_url = 'https://api.github.com/users/'
     url = base_url + user
+    r = requests.get(url, auth=('wvanamstel',pwd))
+    #assert r.status_code == 200
+    return r.json()['followers'], r.json()['public_repos']
+
+
+def get_repos(user):
+    base_url = 'https://api.github.com/users/'
+    url = base_url + user + '/repos'
     r = requests.get(url)
     assert r.status_code == 200
-    print r.json()
+    return r.json
+
+def store_super_users(pwd):
+    client = MongoClient('mongdodb://localhost:27017/')
+    db = client['github_super']
+
+    top_starred = pd.read_csv('../data/top_starred.csv')
+    top_projects = top_starred.repository_name.unique()[:150]
+
+    for project in top_projects:
+        user = top_projects[repository_name==project].repository_owner.unique()[0]
+        url = 'https://api.github.com/repos/' + user + '/' + project + '/stats/contributors'
+        r = requests.get(url, auth=('wvanamstel',pwd))
+
+        db.gh.insert()
+    pass
+
+def get_github_api_data():
+    pass
 
 if __name__ == '__main__':
     #connect_to_mongoDB()

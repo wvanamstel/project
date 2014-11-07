@@ -16,3 +16,13 @@ JOIN (SELECT actor_attributes_login, count(actor_attributes_login) AS cnt
   DESC LIMIT 25) b
  ON a.actor_attributes_login = b.actor_attributes_login
  ORDER BY b.actor_attributes_login;
+
+
+ #Top recently starred repos
+SELECT repository_name, repository_owner, repository_watchers, repository_created_at, created_at
+FROM [githubarchive:github.timeline]
+WHERE created_at > DATE('2014-11-06')
+GROUP EACH BY repository_name, repository_owner, repository_watchers, repository_created_at, created_at
+ORDER BY repository_watchers DESC
+LIMIT 10000;
+
