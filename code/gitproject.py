@@ -1,10 +1,12 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pylab as plt
-import pymongo
+from pymongo import MongoClient
+from pymongo import errors
 import subprocess
 import requests
 import json
+import time
 
 
 def connect_to_mongoDB():
@@ -13,7 +15,7 @@ def connect_to_mongoDB():
                      shell=True, close_fds=True)
 
     #connect to remote mongodb
-    client = pymongo.MongoClient("localhost", 27017)
+    client = MongoClient("localhost", 27017)
     client.github.authenticate('ghtorrentro', 'ghtorrentro')
     db = client.github
 
@@ -112,19 +114,22 @@ def get_repos(user):
     return r.json
 
 def store_super_users(pwd):
-    client = MongoClient('mongdodb://localhost:27017/')
-    db = client['github_super']
+    top_starred = pd.read_csv('../data/top_projects.csv')
+    top_projects = top_starred.repository_name.unique()[:1000]
 
-    top_starred = pd.read_csv('../data/top_starred.csv')
-    top_projects = top_starred.repository_name.unique()[:150]
-
-    for project in top_projects:
-        user = top_projects[repository_name==project].repository_owner.unique()[0]
-        url = 'https://api.github.com/repos/' + user + '/' + project + '/stats/contributors'
+    #get top project contributors
+    for i in range(20):
+        project = top_projects[i]
+        owner = top_starred[top_starred['repository_name']==project].repository_owner.unique()[0]
+        url = 'https://api.github.com/repos/' + owner + '/' + project + '/stats/contributors'
         r = requests.get(url, auth=('wvanamstel',pwd))
+        time.sleep(3)
+        records = len(r.json())
+        #require that a repo has at least 5 contributors to be included
+        if len(records)>5:
+            for i in xrange(1,3):
+                print r.json()[records - i]['author']['login']
 
-        db.gh.insert()
-    pass
 
 def get_github_api_data():
     pass
