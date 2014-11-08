@@ -193,13 +193,16 @@ def get_user_events(df, pwd):
 
     data = [['user', 'repo', 'event_type', 'action', 'timestamp', 'public']]
     for i in xrange(top_users.shape[0]):
-        if (i % 50 == 0):
+        if (i % 100 == 0):
             print i
+            write_to_csv('user_events' + str(i/100) + '.csv', data)
+            data = [['user', 'repo', 'event_type', 'action', 'timestamp', 'public']]
+
         base_url = 'https://api.github.com/users/' + str(top_users[i]) + '/events?page='
-        time.sleep(3)
         for j in xrange(1,11):
             url = base_url + str(j)
             event_data = requests.get(url, auth=('wvanamstel', pwd))
+            time.sleep(2)
             if event_data.status_code == 200:
                 for k in range(len(event_data.json())):
                     temp = []
@@ -215,7 +218,7 @@ def get_user_events(df, pwd):
                     data.append(temp)
 
     #write to csv
-    write_to_csv('top_users_events.csv', data)
+    #write_to_csv('top_users_events.csv', data)
 
     return None
 
