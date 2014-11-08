@@ -7,6 +7,10 @@ import subprocess
 import requests
 import json
 import time
+import csv
+from itertools import chain
+import codecs
+import re
 
 
 def connect_to_mongoDB():
@@ -117,22 +121,77 @@ def store_super_users(pwd):
     top_starred = pd.read_csv('../data/top_projects.csv')
     top_projects = top_starred.repository_name.unique()[:1000]
 
+    data = []
+    columns = ['repository', 'user1', 'user2']
+    data.append(columns)
     #get top project contributors
-    for i in range(20):
+    for i in range(len(top_projects)):
+        print i
         project = top_projects[i]
         owner = top_starred[top_starred['repository_name']==project].repository_owner.unique()[0]
         url = 'https://api.github.com/repos/' + owner + '/' + project + '/stats/contributors'
-        r = requests.get(url, auth=('wvanamstel',pwd))
-        time.sleep(3)
+        r = requests.get(url, auth=('wvanamstel', pwd))
+        time.sleep(1)   #don't overwhelm the api
         records = len(r.json())
+
         #require that a repo has at least 5 contributors to be included
-        if len(records)>5:
+        if records > 5:
+            temp = []
+            temp.append(project)
             for i in xrange(1,3):
-                print r.json()[records - i]['author']['login']
+                try:
+                    temp.append(r.json()[records - i]['author']['login'])
+                except TypeError:
+                    continue
+            data.append(temp)
+
+    #write super users to csv file
+    write_to_csv('top_users.csv', data)
+   
+    return None
 
 
-def get_github_api_data():
-    pass
+def get_github_user_data(df, pwd):
+    top_users = df.user1.values
+    second_users = df.user2.values
+    all_users = np.hstack((top_users, second_users))
+
+    #get the column names, which are the keys of the json dict
+    rndm = requests.get('https://api.github.com/users/mdo', auth=('wvanamstel', pwd))
+    cols = rndm.json().keys()
+    data = []
+    tmp = [['user']]
+    tmp.append(cols)
+    tmp = list(chain.from_iterable(tmp))
+    data.append(tmp)
+
+    for i in xrange(top_users.shape[0]):
+        if (i % 50 == 0):
+            print i
+        tmp = [[top_users[i]]]
+        url = 'https://api.github.com/users/' + top_users[i]
+        user_data = requests.get(url, auth=('wvanamstel', pwd))
+        tmp.append(user_data.json().values())
+        tmp = list(chain.from_iterable(tmp))
+        #tmp[11] = (str(re.sub('[^\w\s]+', '', tmp[11])))
+        for j in range(len(tmp)):
+            try:
+                tmp[j] = str(tmp[j])
+            except UnicodeError:
+                tmp[j] = ''
+    
+        data.append(tmp)
+
+    #write to csv
+    write_to_csv('top_user_details.csv', data)
+  
+    return data
+
+def write_to_csv(filename, data):
+    fout = open(filename, 'wb')
+    a = csv.writer(fout)
+    a.writerows(data)
+    fout.close()
 
 if __name__ == '__main__':
     #connect_to_mongoDB()
