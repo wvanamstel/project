@@ -165,15 +165,14 @@ def get_github_user_data(df, pwd):
     tmp = list(chain.from_iterable(tmp))
     data.append(tmp)
 
-    for i in xrange(top_users.shape[0]):
+    for i in xrange(all_users.shape[0]):
         if (i % 50 == 0):
             print i
-        tmp = [[top_users[i]]]
-        url = 'https://api.github.com/users/' + top_users[i]
+        tmp = [[all_users[i]]]
+        url = 'https://api.github.com/users/' + str(all_users[i])
         user_data = requests.get(url, auth=('wvanamstel', pwd))
         tmp.append(user_data.json().values())
         tmp = list(chain.from_iterable(tmp))
-        #tmp[11] = (str(re.sub('[^\w\s]+', '', tmp[11])))
         for j in range(len(tmp)):
             try:
                 tmp[j] = str(tmp[j])
@@ -183,9 +182,42 @@ def get_github_user_data(df, pwd):
         data.append(tmp)
 
     #write to csv
-    write_to_csv('top_user_details.csv', data)
+    write_to_csv('top_users_details.csv', data)
   
-    return data
+    return None
+
+def get_user_events(df, pwd):
+    top_users = df.user1.values
+    second_users = df.user2.values
+    all_users = np.hstack((top_users, second_users))
+
+    data = [['user', 'repo', 'event_type', 'action', 'timestamp', 'public']]
+    for i in xrange(top_users.shape[0]):
+        if (i % 50 == 0):
+            print i
+        base_url = 'https://api.github.com/users/' + str(top_users[i]) + '/events?page='
+        time.sleep(3)
+        for j in xrange(1,11):
+            url = base_url + str(j)
+            event_data = requests.get(url, auth=('wvanamstel', pwd))
+            if event_data.status_code == 200:
+                for k in range(len(event_data.json())):
+                    temp = []
+                    temp.append(event_data.json()[k]['actor']['login'])
+                    temp.append(event_data.json()[k]['repo'])
+                    temp.append(event_data.json()[k]['type'])
+                    try:
+                        temp.append(event_data.json()[k]['payload']['action'])
+                    except KeyError:
+                        temp.append('NA')
+                    temp.append(event_data.json()[k]['created_at'])
+                    temp.append(event_data.json()[k]['public'])
+                    data.append(temp)
+
+    #write to csv
+    write_to_csv('top_users_events.csv', data)
+
+    return None
 
 def write_to_csv(filename, data):
     fout = open(filename, 'wb')
