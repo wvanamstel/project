@@ -9,8 +9,9 @@ import json
 import time
 import csv
 from itertools import chain
-import codecs
-import re
+from sklearn.svm import OneClassSVM
+from sklearn.cross_validation import ShuffleSplit
+
 
 
 def connect_to_mongoDB():
@@ -191,10 +192,12 @@ def get_user_events(df, pwd):
     second_users = df.user2.values
     all_users = np.hstack((top_users, second_users))
 
+    #get data
     data = [['user', 'repo', 'event_type', 'action', 'timestamp', 'public']]
     for i in xrange(top_users.shape[0]):
-        if (i % 100 == 0):
+        if (i % 5 == 0):
             print i
+        if (i % 100 == 0):
             write_to_csv('user_events' + str(i/100) + '.csv', data)
             data = [['user', 'repo', 'event_type', 'action', 'timestamp', 'public']]
 
@@ -203,7 +206,8 @@ def get_user_events(df, pwd):
             url = base_url + str(j)
             try:
                 event_data = requests.get(url, auth=('wvanamstel', pwd))
-            except ConnectionError:
+            except requests.exceptions.ConnectionError as e:
+                print e
                 time.sleep(10)
                 continue
             if event_data.status_code == 200:
@@ -221,7 +225,7 @@ def get_user_events(df, pwd):
                     data.append(temp)
 
     #write to csv
-    #write_to_csv('top_users_events.csv', data)
+    write_to_csv('top_users_events_last.csv', data)
 
     return None
 
@@ -230,6 +234,28 @@ def write_to_csv(filename, data):
     a = csv.writer(fout)
     a.writerows(data)
     fout.close()
+
+def preprocess_data():
+    pass
+
+def fit_prelim_model():  #for prelim testing purposes
+    #read data
+    df = pd.read_csv('../data/top_users_details.csv')
+    df = df[df.public_repos!='False']                           #TODO: shift over row values in these records
+    cols = ['public_repos', 'followers','following','public_gists']
+    df_small = df[cols]
+    X = df_small.values
+
+    rs = ShuffleSplit(X.shape[0], n_iter = 1, random_state=31)
+
+    for train_ind, test_ind in rs:
+        train = X[train_ind]
+        test = X[test_ind]
+
+    clf = OneClassSVM()
+    clf.fit(train)
+    print clf.predict(test)     #this is pretty heinous
+
 
 if __name__ == '__main__':
     #connect_to_mongoDB()
