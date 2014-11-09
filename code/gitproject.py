@@ -194,14 +194,14 @@ def get_user_events(df, pwd):
 
     #get data
     data = [['user', 'repo', 'event_type', 'action', 'timestamp', 'public']]
-    for i in xrange(top_users.shape[0]):
+    for i in xrange(601, all_users.shape[0]):
         if (i % 5 == 0):
             print i
         if (i % 100 == 0):
             write_to_csv('user_events' + str(i/100) + '.csv', data)
             data = [['user', 'repo', 'event_type', 'action', 'timestamp', 'public']]
 
-        base_url = 'https://api.github.com/users/' + str(top_users[i]) + '/events?page='
+        base_url = 'https://api.github.com/users/' + str(all_users[i]) + '/events?page='
         for j in xrange(1,11):
             url = base_url + str(j)
             try:
@@ -234,6 +234,26 @@ def write_to_csv(filename, data):
     a = csv.writer(fout)
     a.writerows(data)
     fout.close()
+
+def stitch_together():
+    #combine user details to 1 csv file
+    df1 = pd.read_csv('../data/raw/top_user_details.csv')
+    df2 = pd.read_csv('../data/raw/top_user_details2.csv')
+    out = pd.concat([df1, df2], axis=0)
+    out.to_csv('../data/top_user_details_all.csv')
+
+    #combine event files into 1
+    df = pd.read_csv('../data/raw/user_events1.csv')
+    for i in range(1,13):
+        filename = '../data/raw/user_events' + str(i) + '.csv'
+        df_temp = pd.read_csv(filename)
+        df = pd.concat([df, df_temp], axis=0)
+
+    df_last = pd.read_csv('../data/raw/top_users_events_last.csv')
+    df = pd.concat([df, df_last])
+    df.to_csv('../data/top_user_events.csv')
+
+    return None
 
 def preprocess_data():
     pass
