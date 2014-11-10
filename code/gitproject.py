@@ -12,7 +12,7 @@ from itertools import chain
 from sklearn.svm import OneClassSVM
 from sklearn.cross_validation import ShuffleSplit
 from sklearn.cross_validation import cross_val_score
-
+from sklearn.grid_search import GridSearchCV
 
 
 def connect_to_mongoDB():
@@ -263,7 +263,7 @@ def load_data():
     #clean up data frames
     df_users = df_users[df_users.user != 'nurupu'] #empty user record
     #shif columns of certain users (about 30) who are missing col values
-    ind_to_shift = df_users[df.public_repos=='False'].index
+    ind_to_shift = df_users[df_users.public_repos=='False'].index
     df_temp = df_users.iloc[ind_to_shift]
     df_temp = pd.concat([df_temp.iloc[:,:2], df_temp.iloc[:,2:].shift(1, axis=1)], axis=1)
     df_temp = pd.concat([df_temp.iloc[:,:5], df_temp.iloc[:,5:].shift(1, axis=1)], axis=1)
@@ -274,13 +274,20 @@ def load_data():
     df_temp.public_repos = 0
     df_temp.following = 0
     df_temp.iloc[:,23], df_temp.iloc[:,24] = df_temp.iloc[:,24].values, df_temp.iloc[:,23].values
-    df.iloc[ind_to_shift] = df_temp.values
+    df_users.iloc[ind_to_shift] = df_temp.values
 
-    df.public_repos = df.public_repos.astype(int)
-    df.followers = df.followers.astype(int)
-    df.public_gists = df.public_gists.astype(int)
+    df_users.public_repos = df_users.public_repos.astype(int)
+    df_users.followers = df_users.followers.astype(int)
+    df_users.public_gists = df_users.public_gists.astype(int)
+    df_users.drop('Unnamed: 0', axis=1, inplace=True)
 
-    return df_user, df_events
+    df_events.drop('Unnamed: 0', axis=1, inplace=True)
+    df_events.drop('public', axis=1, inplace=True)
+    #clean up repo column
+    temp = df_events['repo'].apply(lambda x: x.rsplit()[-1].rstrip('\'}'))
+    df_events.repo = temp.apply(lambda x: x[x.find('/') + 1:])
+
+    return df_users, df_events
 
     
 def fit_prelim_model(df):  #for prelim testing purposes
@@ -295,12 +302,24 @@ def fit_prelim_model(df):  #for prelim testing purposes
         train = X[train_ind]
         test = X[test_ind]
 
-    score_lst = cross_val_score(OneClassSVM(), train, scoring='roc_auc',cv=5)
-    print score_lst
+    # score_lst = cross_val_score(OneClassSVM(), train, scoring='roc_auc',cv=5)
+    # print score_lst
     clf = OneClassSVM()
-    clf.fit(train)
-    print clf.predict(test)     #this is pretty heinous
 
+    #do a parameter grid search
+    param_grid = {'kernel': ['rbf'],
+                   'nu': [0.3, 0.5, 0.7],
+                   'poly': [2, 3],
+                   'gamma': [0.1, 0.2, 0.5, 1.0],
+                   'coef': [0.05, 0.1] 
+                 }
+
+    gs_cv = GridSearchCV(clf, param_grid, n_jobs=-1, scoring='precision').fit(train)
+    print gs_cv.best_params_
+
+    #clf.fit(train)
+    #print clf.predict(test)     #this is pretty heinous
+    return None
 
 if __name__ == '__main__':
     #connect_to_mongoDB()
