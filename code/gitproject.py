@@ -11,6 +11,7 @@ import csv
 from itertools import chain
 from sklearn.svm import OneClassSVM
 from sklearn.cross_validation import ShuffleSplit
+from sklearn.cross_validation import cross_val_score
 
 
 
@@ -256,14 +257,14 @@ def stitch_together():
     return None
 
 def load_data():
-    df_users = pd.load_csv('../data/top_users_details_all.csv')
-    df_events = pdd.load_csv('../data/top_user_events')
+    df_users = pd.read_csv('../data/top_user_details_all.csv')
+    df_events = pd.read_csv('../data/top_user_events.csv')
 
     #clean up data frames
     df_users = df_users[df_users.user != 'nurupu'] #empty user record
     #shif columns of certain users (about 30) who are missing col values
-    ind_to_shift = df[df.public_repos=='False'].index
-    df_temp = df.iloc[ind_to_shift]
+    ind_to_shift = df_users[df.public_repos=='False'].index
+    df_temp = df_users.iloc[ind_to_shift]
     df_temp = pd.concat([df_temp.iloc[:,:2], df_temp.iloc[:,2:].shift(1, axis=1)], axis=1)
     df_temp = pd.concat([df_temp.iloc[:,:5], df_temp.iloc[:,5:].shift(1, axis=1)], axis=1)
     df_temp = pd.concat([df_temp.iloc[:,:10], df_temp.iloc[:,10:].shift(1, axis=1)], axis=1)
@@ -294,6 +295,8 @@ def fit_prelim_model(df):  #for prelim testing purposes
         train = X[train_ind]
         test = X[test_ind]
 
+    score_lst = cross_val_score(OneClassSVM(), train, scoring='roc_auc',cv=5)
+    print score_lst
     clf = OneClassSVM()
     clf.fit(train)
     print clf.predict(test)     #this is pretty heinous
