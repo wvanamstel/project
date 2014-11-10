@@ -255,13 +255,35 @@ def stitch_together():
 
     return None
 
-def preprocess_data():
-    pass
+def load_data():
+    df_users = pd.load_csv('../data/top_users_details_all.csv')
+    df_events = pdd.load_csv('../data/top_user_events')
 
-def fit_prelim_model():  #for prelim testing purposes
+    #clean up data frames
+    df_users = df_users[df_users.user != 'nurupu'] #empty user record
+    #shif columns of certain users (about 30) who are missing col values
+    ind_to_shift = df[df.public_repos=='False'].index
+    df_temp = df.iloc[ind_to_shift]
+    df_temp = pd.concat([df_temp.iloc[:,:2], df_temp.iloc[:,2:].shift(1, axis=1)], axis=1)
+    df_temp = pd.concat([df_temp.iloc[:,:5], df_temp.iloc[:,5:].shift(1, axis=1)], axis=1)
+    df_temp = pd.concat([df_temp.iloc[:,:10], df_temp.iloc[:,10:].shift(1, axis=1)], axis=1)
+    df_temp = pd.concat([df_temp.iloc[:,:12], df_temp.iloc[:,12:].shift(1, axis=1)], axis=1)
+    df_temp = pd.concat([df_temp.iloc[:,:14], df_temp.iloc[:,14:].shift(1, axis=1)], axis=1)
+    df_temp = pd.concat([df_temp.iloc[:,:17], df_temp.iloc[:,17:].shift(1, axis=1)], axis=1)
+    df_temp.public_repos = 0
+    df_temp.following = 0
+    df_temp.iloc[:,23], df_temp.iloc[:,24] = df_temp.iloc[:,24].values, df_temp.iloc[:,23].values
+    df.iloc[ind_to_shift] = df_temp.values
+
+    df.public_repos = df.public_repos.astype(int)
+    df.followers = df.followers.astype(int)
+    df.public_gists = df.public_gists.astype(int)
+
+    return df_user, df_events
+
+    
+def fit_prelim_model(df):  #for prelim testing purposes
     #read data
-    df = pd.read_csv('../data/top_users_details.csv')
-    df = df[df.public_repos!='False']                           #TODO: shift over row values in these records
     cols = ['public_repos', 'followers','following','public_gists']
     df_small = df[cols]
     X = df_small.values
@@ -279,6 +301,7 @@ def fit_prelim_model():  #for prelim testing purposes
 
 if __name__ == '__main__':
     #connect_to_mongoDB()
-    df_experts = read_data('data/experts.csv')
-    features = build_features(df_experts)
-    
+    #df_experts = read_data('data/experts.csv')
+    #features = build_features(df_experts)
+    df_user, df_events = load_data()
+    fit_prelim_model(df_user)
