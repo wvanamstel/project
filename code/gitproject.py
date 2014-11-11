@@ -14,6 +14,7 @@ from sklearn.cross_validation import ShuffleSplit
 from sklearn.cross_validation import cross_val_score
 from sklearn.grid_search import GridSearchCV
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import f1_score, accuracy_score
 
 
 def connect_to_mongoDB():
@@ -289,32 +290,40 @@ def load_data():
     df_events.repo = temp.apply(lambda x: x[x.find('/') + 1:])
     df_events.timestamp = pd.to_datetime(df_events.timestamp)   #convert to date time
 
+    #get daily averages of events
     df_events = bucket_events(df_events)
+
 
     return df_users, df_events
 
 def bucket_events(df, freq='d'):
+    #make dummy variables from the eventtype column
     dums = pd.get_dummies(df.event_type)
+    cols = dums.columns
     new = pd.concat((df, dums), axis=1)
     new = new.set_index(new.timestamp.values)
+    #preserve the user column
     new = pd.concat((new.iloc[:,0], new.iloc[:,5:]), axis=1)
 
-    i=0
+    #get the frequency of events per time period (default=daily)
+    #compute the average daily event frequency
+    bucket_average = pd.DataFrame()#columns=cols)
     for user in new.user.unique():
-        # if (i%100==0):
-        #      print i
         temp = new[new.user==user]
-        bucket_average = pd.DataFrame(np.mean(temp.resample(freq, how='mean')))
-        i+=1
+        temp2 = pd.DataFrame(np.mean(temp.resample(freq, how='mean'))).transpose()
+        temp2['user'] = user
+        bucket_average= pd.concat((bucket_average, temp2), axis=0)
 
     return bucket_average
 
     
 def fit_prelim_model(df):  #for prelim testing purposes
     #read data
-    cols = ['public_repos', 'followers','following','public_gists']
-    df_small = df[cols]
-    X = df_small.values
+    X = df.values
+
+    #scale data
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
 
     rs = ShuffleSplit(X.shape[0], n_iter = 1, random_state=31)
 
@@ -324,30 +333,105 @@ def fit_prelim_model(df):  #for prelim testing purposes
 
     # score_lst = cross_val_score(OneClassSVM(), train, scoring='roc_auc',cv=5)
     # print score_lst
-    clf = OneClassSVM()
-
+    clf = OneClassSVM(gamma=0.005, nu=0.001)
+    '''
     #do a parameter grid search
-    param_grid = {'kernel': ['rbf'],
+    param_grid = {'kernel': ['rbf', 'poly'],
                    'nu': [0.3, 0.5, 0.7],
+                   'gamma': [0.01, 0.05, 0.15, 0.25],
                    'poly': [2, 3],
-                   'gamma': [0.1, 0.2, 0.5, 1.0],
                    'coef': [0.05, 0.1] 
                  }
 
-    gs_cv = GridSearchCV(clf, param_grid, n_jobs=-1, scoring='precision').fit(train)
+    gs_cv = GridSearchCV(clf, param_grid, n_jobs=1, scoring='precision').fit(train)
     print gs_cv.best_params_
+'''
+    clf.fit(train)
+    #predict
+    pred = clf.predict(test)     #this is pretty heinous
+    true =[1] * pred.shape[0]
+    f1 = f1_score(true, pred)
+    print f1
+    ac = accuracy_score(true, pred)
+    print ac
+
+    return None
+
+def find_params(df):
+    '''
+    manual gridsearch for the oneclasssvm classifier
+    '''
+    X = df.values
 
     #scale data
     scaler = StandardScaler()
-    train = scaler.fit_transform(train)
+    X = scaler.fit_transform(X)
 
-    #clf.fit(train)
-    #print clf.predict(test)     #this is pretty heinous
+    rs = ShuffleSplit(X.shape[0], n_iter = 1, random_state=31)
+
+    for train_ind, test_ind in rs:
+        train = X[train_ind]
+        test = X[test_ind]
+
+    kernel = ['rbf', 'poly']
+    nu = [0.3, 0.5, 0.7]
+    gamma = [0.01, 0.05, 0.15, 0.25]
+    degree= [2,3]
+    coef0 = [0.05, 0.1]
+    nu_tune = list(np.arange(0.01, 0.25, 0.01))
+    gamma_tune = list(np.arange(0.005, 0.05,0.005))
+
+    for kern in kernel:   
+        f1_final = 0
+        if kern=='rbf':
+            for n in nu_tune:
+                for g in gamma_tune:
+                    clf = OneClassSVM(kernel=kern, gamma=g, nu=n)
+                    clf.fit(train)
+                    pred = clf.predict(test)
+                    true =[1] * pred.shape[0]
+                    f1 = f1_score(true, pred)
+                    ac = accuracy_score(true, pred)
+                    if f1 > f1_final:
+                        f1_final = f1
+                        nu_final = n
+                        gamma_final= g
+            print 'rbf'
+            print 'f1: ', f1_final
+            print 'nu: ', nu_final
+            print 'gamma: ', gamma_final
+        else:
+            for coef in coef0:
+                for deg in degree:
+                    clf = OneClassSVM(kernel=kern, degree=deg, coef0=coef)
+                    clf.fit(train)
+                    pred = clf.predict(test)
+                    true =[1] * pred.shape[0]
+                    f1 = f1_score(true, pred)
+                    ac = accuracy_score(true, pred)
+                    if f1 > f1_final:
+                        f1_final = f1
+                        nu_final = n
+                        gamma_final= g
+            print 'poly'
+            print 'f1: ', f1_final
+            print 'nu: ', nu_final
+            print 'gamma: ', gamma_final
+
     return None
+
 
 if __name__ == '__main__':
     #connect_to_mongoDB()
     #df_experts = read_data('data/experts.csv')
     #features = build_features(df_experts)
+    print 'Loading data'
     df_user, df_events = load_data()
-    fit_prelim_model(df_user)
+    cols = ['user', 'public_repos', 'followers','following','public_gists']
+    df_small = df_user[cols]
+    df_in = pd.merge(df_small, df_events, on='user')
+    df_in = df_in.drop_duplicates()
+    df_in = df_in.iloc[:,1:]    #drop user names
+
+    print 'Fitting model'
+    fit_prelim_model(df_in)
