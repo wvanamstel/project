@@ -13,6 +13,7 @@ from sklearn.svm import OneClassSVM
 from sklearn.cross_validation import ShuffleSplit
 from sklearn.cross_validation import cross_val_score
 from sklearn.grid_search import GridSearchCV
+from sklearn.preprocessing import StandardScaler
 
 
 def connect_to_mongoDB():
@@ -286,8 +287,27 @@ def load_data():
     #clean up repo column
     temp = df_events['repo'].apply(lambda x: x.rsplit()[-1].rstrip('\'}'))
     df_events.repo = temp.apply(lambda x: x[x.find('/') + 1:])
+    df_events.timestamp = pd.to_datetime(df_events.timestamp)   #convert to date time
+
+    df_events = bucket_events(df_events)
 
     return df_users, df_events
+
+def bucket_events(df, freq='d'):
+    dums = pd.get_dummies(df.event_type)
+    new = pd.concat((df, dums), axis=1)
+    new = new.set_index(new.timestamp.values)
+    new = pd.concat((new.iloc[:,0], new.iloc[:,5:]), axis=1)
+
+    i=0
+    for user in new.user.unique():
+        # if (i%100==0):
+        #      print i
+        temp = new[new.user==user]
+        bucket_average = pd.DataFrame(np.mean(temp.resample(freq, how='mean')))
+        i+=1
+
+    return bucket_average
 
     
 def fit_prelim_model(df):  #for prelim testing purposes
@@ -316,6 +336,10 @@ def fit_prelim_model(df):  #for prelim testing purposes
 
     gs_cv = GridSearchCV(clf, param_grid, n_jobs=-1, scoring='precision').fit(train)
     print gs_cv.best_params_
+
+    #scale data
+    scaler = StandardScaler()
+    train = scaler.fit_transform(train)
 
     #clf.fit(train)
     #print clf.predict(test)     #this is pretty heinous
