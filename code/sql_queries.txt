@@ -26,3 +26,8 @@ GROUP EACH BY repository_name, repository_owner, repository_watchers, repository
 ORDER BY repository_watchers DESC
 LIMIT 10000;
 
+#random users
+SELECT repository_name, repository_owner, repository_watchers, repository_created_at, created_at
+FROM [githubarchive:github.timeline]
+WHERE repository_watchers=0 and created_at<DATE('2014-10-01 12:00:00')
+LIMIT 5000;
