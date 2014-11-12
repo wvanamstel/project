@@ -1,64 +1,17 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pylab as plt
-from pymongo import MongoClient
-from pymongo import errors
 import subprocess
 import requests
 import json
 import time
 import csv
 from itertools import chain
-from sklearn.svm import OneClassSVM
-from sklearn.cross_validation import ShuffleSplit
-from sklearn.cross_validation import cross_val_score
+from sklearn.svm import OneClassSVM, SVC
+from sklearn.cross_validation import ShuffleSplit, cross_val_score
 from sklearn.grid_search import GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import f1_score, accuracy_score
-
-
-def connect_to_mongoDB():
-    #set up SSH tunnel to remote server
-    subprocess.Popen('ssh -L 27017:dutihr.st.ewi.tudelft.nl:27017 ghtorrent@dutihr.st.ewi.tudelft.nl', 
-                     shell=True, close_fds=True)
-
-    #connect to remote mongodb
-    client = MongoClient("localhost", 27017)
-    client.github.authenticate('ghtorrentro', 'ghtorrentro')
-    db = client.github
-
-    #connect to collection 'issues'
-    collection = db.issues
-    collection.find_one()
-
-
-def read_data(filename, explore=False):
-    #read in data from csv file, exported github archive sql query
-    df = pd.read_csv(filename)
-
-    #take out the bots
-    bots = ['opencv-pushbot', 'openshift-bot']
-    for bot in bots:
-        df = df[df.a_actor_attributes_login!=bot]
-
-    #convert date/time cols into a datetime object
-    df.a_created_at =  pd.to_datetime(df.a_created_at)
-    df.a_repository_created_at = pd.to_datetime(df.a_repository_created_at)
-
-    #convert True/False and NA ---> 1 and 0
-    df['a_payload_pull_request_merged'] = df['a_payload_pull_request_merged'].apply(lambda x: 1 if x==True else 0)
-    df['a_payload_commit_flag'] = df['a_payload_commit_flag'].apply(lambda x: 1 if x==True else 0)
-
-    #print out some properties of the dataframe
-    if explore:
-        print 'Data types: \n', df.dtypes, '\n\n\n'
-        print 'Shape: ', df.shape
-        print 'User info: '
-        for usr in df_experts.a_actor_attributes_login.unique():
-            df_user = df_experts[df_experts.a_actor_attributes_login==usr]
-            print usr, df_user.shape, df_user.a_payload_pull_request_merged.sum()
-
-    return df
 
 
 def plot_pull_requests_merged(df, users):
@@ -75,35 +28,6 @@ def plot_pull_requests_merged(df, users):
     ts_res.plot()
 
     return None
-
-
-def build_features(df, pwd):
-    #select and engineer features
-    users = df.a_actor_attributes_login.unique()
-    metrics={}
-    for usr in users:
-        #prep data
-        temp = df[df.a_actor_attributes_login==usr]
-        temp.sort('a_created_at', inplace=True)
-        temp = temp.set_index('a_created_at')
-
-        #get features
-        weekly_pulls = np.mean(temp['a_payload_pull_request_merged'].resample('W', how='sum'))
-        weekly_commits = np.mean(temp['a_payload_commit_flag'].resample('W', how='sum'))
-        lang_list = [x for x in list(temp['a_repository_language'].unique()) if str(x)!='nan']
-
-        #urls and cumul number of unique repos owned or forked by user
-        repos_url = temp[temp['a_repository_owner'] == usr].a_repository_url.unique()
-        repos_url = repos_url.shape[0]
-
-        metrics[usr] = {}
-        metrics[usr]['weekly_pulls'] = weekly_pulls
-        metrics[usr]['weekly_commits'] = weekly_commits
-        metrics[usr]['languages'] = lang_list
-        metrics[usr]['num_followers'] = num_followers
-        metrics[usr]['num_repos'] = num_repos
-
-    return metrics
 
 
 def get_followers(user, pwd):
@@ -156,6 +80,9 @@ def store_super_users(pwd):
 
 
 def get_github_user_data(df, pwd):
+    ''''
+    access github api to scrape user data
+    '''
     top_users = df.user1.values
     second_users = df.user2.values
     all_users = np.hstack((top_users, second_users))
@@ -170,7 +97,7 @@ def get_github_user_data(df, pwd):
     data.append(tmp)
 
     for i in xrange(all_users.shape[0]):
-        if (i % 50 == 0):
+        if (i % 100 == 0):
             print i
         tmp = [[all_users[i]]]
         url = 'https://api.github.com/users/' + str(all_users[i])
@@ -186,19 +113,22 @@ def get_github_user_data(df, pwd):
         data.append(tmp)
 
     #write to csv
-    write_to_csv('top_users_details.csv', data)
+    write_to_csv('user_details.csv', data)
   
     return None
 
 def get_user_events(df, pwd):
-    top_users = df.user1.values
-    second_users = df.user2.values
-    all_users = np.hstack((top_users, second_users))
+    '''
+    access github api to scrape user event data
+    '''
+    #top_users = df.user1.values
+    #second_users = df.user2.values
+    all_users = df.values #np.hstack((top_users, second_users))
 
     #get data
     data = [['user', 'repo', 'event_type', 'action', 'timestamp', 'public']]
-    for i in xrange(601, all_users.shape[0]):
-        if (i % 5 == 0):
+    for i in xrange(all_users.shape[0]):
+        if (i % 10 == 0):
             print i
         if (i % 100 == 0):
             write_to_csv('user_events' + str(i/100) + '.csv', data)
@@ -228,7 +158,7 @@ def get_user_events(df, pwd):
                     data.append(temp)
 
     #write to csv
-    write_to_csv('top_users_events_last.csv', data)
+    write_to_csv('user_events_last.csv', data)
 
     return None
 
@@ -243,46 +173,30 @@ def stitch_together():
     df1 = pd.read_csv('../data/raw/top_user_details.csv')
     df2 = pd.read_csv('../data/raw/top_user_details2.csv')
     out = pd.concat([df1, df2], axis=0)
-    out.to_csv('../data/top_user_details_all.csv')
+    out.to_csv('../data/user_details_all.csv')
 
     #combine event files into 1
-    df = pd.read_csv('../data/raw/user_events1.csv')
-    for i in range(1,13):
-        filename = '../data/raw/user_events' + str(i) + '.csv'
+    df = pd.read_csv('./user_events1.csv')
+    for i in range(2,5):
+        filename = './user_events' + str(i) + '.csv'
         df_temp = pd.read_csv(filename)
         df = pd.concat([df, df_temp], axis=0)
 
-    df_last = pd.read_csv('../data/raw/top_users_events_last.csv')
+    df_last = pd.read_csv('./user_events_last.csv')
     df = pd.concat([df, df_last])
-    df.to_csv('../data/top_user_events.csv')
+    df.to_csv('../data/user_events.csv')
 
     return None
 
-def load_data():
-    df_users = pd.read_csv('../data/top_user_details_all.csv')
-    df_events = pd.read_csv('../data/top_user_events.csv')
+def load_data(fin_users, fin_events):
+    df_users = pd.read_csv(fin_users)
+    df_events = pd.read_csv(fin_events)
 
     #clean up data frames
-    df_users = df_users[df_users.user != 'nurupu'] #empty user record
-    #shif columns of certain users (about 30) who are missing col values
-    ind_to_shift = df_users[df_users.public_repos=='False'].index
-    df_temp = df_users.iloc[ind_to_shift]
-    df_temp = pd.concat([df_temp.iloc[:,:2], df_temp.iloc[:,2:].shift(1, axis=1)], axis=1)
-    df_temp = pd.concat([df_temp.iloc[:,:5], df_temp.iloc[:,5:].shift(1, axis=1)], axis=1)
-    df_temp = pd.concat([df_temp.iloc[:,:10], df_temp.iloc[:,10:].shift(1, axis=1)], axis=1)
-    df_temp = pd.concat([df_temp.iloc[:,:12], df_temp.iloc[:,12:].shift(1, axis=1)], axis=1)
-    df_temp = pd.concat([df_temp.iloc[:,:14], df_temp.iloc[:,14:].shift(1, axis=1)], axis=1)
-    df_temp = pd.concat([df_temp.iloc[:,:17], df_temp.iloc[:,17:].shift(1, axis=1)], axis=1)
-    df_temp.public_repos = 0
-    df_temp.following = 0
-    df_temp.iloc[:,23], df_temp.iloc[:,24] = df_temp.iloc[:,24].values, df_temp.iloc[:,23].values
-    df_users.iloc[ind_to_shift] = df_temp.values
+    df_users = df_users[df_users.public_repos!='False']
+    df_users = df_users[df_users.site_admin!='Not Found']
 
-    df_users.public_repos = df_users.public_repos.astype(int)
-    df_users.followers = df_users.followers.astype(int)
-    df_users.public_gists = df_users.public_gists.astype(int)
-    df_users.drop('Unnamed: 0', axis=1, inplace=True)
-
+    #clean up user event data
     df_events.drop('Unnamed: 0', axis=1, inplace=True)
     df_events.drop('public', axis=1, inplace=True)
     #clean up repo column
@@ -290,9 +204,11 @@ def load_data():
     df_events.repo = temp.apply(lambda x: x[x.find('/') + 1:])
     df_events.timestamp = pd.to_datetime(df_events.timestamp)   #convert to date time
 
+    if ('TeamAddEvent' in df_events.columns):
+        df_events.drop('TeamAddEvent', axis=1, inplace=True)
+  
     #get daily averages of events
     df_events = bucket_events(df_events)
-
 
     return df_users, df_events
 
@@ -317,9 +233,9 @@ def bucket_events(df, freq='d'):
     return bucket_average
 
     
-def fit_prelim_model(df):  #for prelim testing purposes
+def fit_model(df_to_fit, df_to_predict):  #for prelim testing purposes
     #read data
-    X = df.values
+    X = df_to_fit.values
 
     #scale data
     scaler = StandardScaler()
@@ -331,35 +247,27 @@ def fit_prelim_model(df):  #for prelim testing purposes
         train = X[train_ind]
         test = X[test_ind]
 
-    # score_lst = cross_val_score(OneClassSVM(), train, scoring='roc_auc',cv=5)
-    # print score_lst
-    clf = OneClassSVM(gamma=0.005, nu=0.001)
-    '''
-    #do a parameter grid search
-    param_grid = {'kernel': ['rbf', 'poly'],
-                   'nu': [0.3, 0.5, 0.7],
-                   'gamma': [0.01, 0.05, 0.15, 0.25],
-                   'poly': [2, 3],
-                   'coef': [0.05, 0.1] 
-                 }
-
-    gs_cv = GridSearchCV(clf, param_grid, n_jobs=1, scoring='precision').fit(train)
-    print gs_cv.best_params_
-'''
+    #clf = OneClassSVM(kernel='rbf', gamma=0.005, nu=0.001)
+    clf = SVC()
     clf.fit(train)
     #predict
-    pred = clf.predict(test)     #this is pretty heinous
-    true =[1] * pred.shape[0]
-    f1 = f1_score(true, pred)
+    pred_test = clf.predict(test) 
+    true =[1] * pred_test.shape[0]
+    f1 = f1_score(true, pred_test)
     print f1
-    ac = accuracy_score(true, pred)
+    ac = accuracy_score(true, pred_test)
     print ac
 
-    return None
+    X_to_pred = df_to_predict.values
+    X_to_pred = scaler.fit_transform(X_to_pred)
+    predictions = clf.predict(X_to_pred)
+
+    return predictions
 
 def find_params(df):
     '''
-    manual gridsearch for the oneclasssvm classifier
+    manual gridsearch for the oneclasssvm classifier, as GridSearchCV is
+    giving unexpected results: rbf kernel with nu=0.001, gamma=0.005
     '''
     X = df.values
 
@@ -426,7 +334,8 @@ if __name__ == '__main__':
     #df_experts = read_data('data/experts.csv')
     #features = build_features(df_experts)
     print 'Loading data'
-    df_user, df_events = load_data()
+    df_user, df_events = load_data('../data/top_user_details_all.csv', '../data/top_user_events.csv')
+    df_user_pred, df_events_pred = load_data('../data/user_details.csv', '../data/user_events.csv')
     cols = ['user', 'public_repos', 'followers','following','public_gists']
     df_small = df_user[cols]
     df_in = pd.merge(df_small, df_events, on='user')
@@ -434,4 +343,4 @@ if __name__ == '__main__':
     df_in = df_in.iloc[:,1:]    #drop user names
 
     print 'Fitting model'
-    fit_prelim_model(df_in)
+    fit_model(df_in)
