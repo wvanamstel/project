@@ -82,10 +82,12 @@ def store_super_users(pwd):
 def get_github_user_data(df, pwd):
     ''''
     access github api to scrape user data
+    IN: dataframe of user names, github api password (str)
+    OUT: csv file of user details written to disk
     '''
-    top_users = df.user1.values
-    second_users = df.user2.values
-    all_users = np.hstack((top_users, second_users))
+    users = df.user1.values
+    #second_users = df.user2.values
+    #all_users = np.hstack((top_users, second_users))
 
     #get the column names, which are the keys of the json dict
     rndm = requests.get('https://api.github.com/users/mdo', auth=('wvanamstel', pwd))
@@ -96,11 +98,11 @@ def get_github_user_data(df, pwd):
     tmp = list(chain.from_iterable(tmp))
     data.append(tmp)
 
-    for i in xrange(all_users.shape[0]):
+    for i in xrange(users.shape[0]):
         if (i % 100 == 0):
             print i
-        tmp = [[all_users[i]]]
-        url = 'https://api.github.com/users/' + str(all_users[i])
+        tmp = [[users[i]]]
+        url = 'https://api.github.com/users/' + str(users[i])
         user_data = requests.get(url, auth=('wvanamstel', pwd))
         tmp.append(user_data.json().values())
         tmp = list(chain.from_iterable(tmp))
@@ -113,13 +115,15 @@ def get_github_user_data(df, pwd):
         data.append(tmp)
 
     #write to csv
-    write_to_csv('user_details.csv', data)
+    write_to_csv('bottom_user_details2.csv', data)
   
     return None
 
 def get_user_events(df, pwd):
     '''
-    access github api to scrape user event data
+    Access github api to scrape user event data
+    IN: DataFrame with user names, github api password (str)
+    OUT: user events in batches of 100 users
     '''
     #top_users = df.user1.values
     #second_users = df.user2.values
@@ -134,6 +138,7 @@ def get_user_events(df, pwd):
             write_to_csv('user_events' + str(i/100) + '.csv', data)
             data = [['user', 'repo', 'event_type', 'action', 'timestamp', 'public']]
 
+        #Access the github api
         base_url = 'https://api.github.com/users/' + str(all_users[i]) + '/events?page='
         for j in xrange(1,11):
             url = base_url + str(j)
@@ -163,13 +168,26 @@ def get_user_events(df, pwd):
     return None
 
 def write_to_csv(filename, data):
+    '''
+    Write intermediate files to csv
+    IN: filename, dataframe of data to be written to csv
+    OUT: csv files
+    '''
     fout = open(filename, 'wb')
     a = csv.writer(fout)
     a.writerows(data)
     fout.close()
 
+    return None
+
+
 def stitch_together():
-    #combine user details to 1 csv file
+    '''
+    consolidate user detail and event files
+    IN: None
+    OUT: csv files written to disk
+    '''
+    #combine user details
     df1 = pd.read_csv('../data/raw/top_user_details.csv')
     df2 = pd.read_csv('../data/raw/top_user_details2.csv')
     out = pd.concat([df1, df2], axis=0)
@@ -189,6 +207,11 @@ def stitch_together():
     return None
 
 def load_data(fin_users, fin_events):
+    '''
+    Load and preprocess user details and event data 
+    IN: filenames of user details and event files
+    OUT: dataframes of cleaned up event and details data
+    '''
     df_users = pd.read_csv(fin_users)
     df_events = pd.read_csv(fin_events)
 
@@ -213,6 +236,11 @@ def load_data(fin_users, fin_events):
     return df_users, df_events
 
 def bucket_events(df, freq='d'):
+    '''
+    Calculate average daily event frequencies
+    IN: dataframe of user event data, time frequency (default is daily)
+    OUT: dataframe of average daily event frequency per user 
+    '''
     #make dummy variables from the eventtype column
     dums = pd.get_dummies(df.event_type)
     cols = dums.columns
@@ -268,6 +296,7 @@ def find_params(df):
     '''
     manual gridsearch for the oneclasssvm classifier, as GridSearchCV is
     giving unexpected results: rbf kernel with nu=0.001, gamma=0.005
+    turns out to be not too meaningful...
     '''
     X = df.values
 
