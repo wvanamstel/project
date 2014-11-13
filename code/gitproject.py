@@ -11,7 +11,8 @@ from sklearn.svm import OneClassSVM, SVC
 from sklearn.cross_validation import ShuffleSplit, cross_val_score
 from sklearn.grid_search import GridSearchCV
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import roc_auc_score, confusion_matrix, precision_score, recall_score
+from sklearn.cluster import DBSCAN, AgglomerativeClustering, KMeans
 
 
 def plot_pull_requests_merged(df, users):
@@ -357,11 +358,94 @@ def find_params(df):
 
     return None
 
+def clustering_approach():
+    '''
+    Cluster user data using various clustering algos
+    OUT:
+    '''
+    df_top_user, df_top_events = g.load_data('../data/top_user_details.csv', '../data/top_user_events.csv')
+    df_user, df_event = g.load_data('../data/user_details.csv', '../data/user_events.csv')
+
+    #remove very rare event column
+    if ('TeamAddEvent' in df_event.columns):
+        df_event.drop('TeamAddEvent', axis=1, inplace=True)
+
+    cols = ['user', 'public_repos', 'followers','following','public_gists']
+    #construct data frame of super users
+    df_small = df_top_user[cols]
+    df_super = pd.merge(df_small, df_top_events, on='user')
+    df_super = df_super.drop_duplicates()
+
+    #construct df containing not super users
+    df_small = df_user[cols]
+    df_no_super = pd.merge(df_small, df_event, on='user')
+    df_no_super = df_no_super.drop_duplicates()
+
+    #label the user as 'super' or not
+    df_super['super']=1
+    df_no_super['super']=0
+    df_in = pd.concat((df_super, df_no_super), axis=0)
+
+    #construct data frame that will hold the true values and preds   
+    names = df_in.pop('user')
+    sup = df_in.pop('super')
+    df_clust = pd.concat((names, sup), axis=1)
+    df_clust['cluster'] = -1
+
+    #read data
+    X = df_in.values
+
+    #scale data and split 
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+
+    rs = ShuffleSplit(X.shape[0], n_iter = 1, random_state=31)
+
+    for train_ind, test_ind in rs:
+        train = X[train_ind]
+        test = X[test_ind]
+
+    #KMeans
+    km_clf = KMeans(n_clusters=2, n_jobs=6)
+    km_clf.fit(train)
+
+    train_results = df_clust.iloc[train_ind]
+    train_results['cluster']=km_clf.labels_
+
+    test_labels = km_clf.predict(test)
+    test_results = df_clust.iloc[test_ind]
+    test_results['cluster']=test_labels
+   
+    #swap labels as super-users are in cluster 0 (messy!!)
+    test_results[test_results['cluster']==1].shape
+    temp = test_results.cluster.apply(lambda x: 0 if x==1 else 1)
+    test_results.cluster = temp
+    temp = train_results.cluster.apply(lambda x: 0 if x==1 else 1)
+    train_results = temp
+    analyse_preds(train_results['super'], train_results['cluster'])
+
+    #Agglomerative clustering
+    ac_clf = AgglomerativeClustering()
+    ac_labels = ac_clf.fit_predict(train)
+    ac_results = df_clust.iloc[train_ind]
+    ac_results['cluster'] = ac_labels
+    analyse_preds(ac_results['super'], ac_results['cluster'])
+
+    return None
+
+def analyse_preds(true, pred):
+    '''
+    Return an analysis of classification results
+    IN: numpy array of true values and predicted values
+    OUT: metrics to stdout
+    '''
+    print confusion_matrix(true, pred)
+    print 'precision: ', precision_score(true, pred)
+    print 'recall: ', recall_score(true, pred)
+    print 'roc_auc: ', roc_auc_score(true, pred)
+
 
 if __name__ == '__main__':
-    #connect_to_mongoDB()
-    #df_experts = read_data('data/experts.csv')
-    #features = build_features(df_experts)
     print 'Loading data'
     df_user, df_events = load_data('../data/top_user_details_all.csv', '../data/top_user_events.csv')
     df_user_pred, df_events_pred = load_data('../data/user_details.csv', '../data/user_events.csv')
