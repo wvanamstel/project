@@ -15,6 +15,13 @@ from sklearn.metrics import roc_auc_score, confusion_matrix, precision_score, re
 from sklearn.cluster import DBSCAN, AgglomerativeClustering, KMeans
 
 
+'''
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Code is still quite messy and needs to be cleaned up a lot!
+'''
+
+
+
 def plot_pull_requests_merged(df, users):
     #plots weekly merged pull requests
     temp = pd.DataFrame()
@@ -47,6 +54,12 @@ def get_repos(user):
     return r.json
 
 def store_super_users(pwd):
+    '''
+    Get the details from the top users on github defined by the top 2
+    contributors to the 1000 most starred projects
+    IN: str, github pwd
+    OUT: csv file of top users written to disk
+    '''
     top_starred = pd.read_csv('../data/top_projects.csv')
     top_projects = top_starred.repository_name.unique()[:1000]
 
@@ -189,21 +202,21 @@ def stitch_together():
     OUT: csv files written to disk
     '''
     #combine user details
-    df1 = pd.read_csv('../data/raw/top_user_details.csv')
-    df2 = pd.read_csv('../data/raw/top_user_details2.csv')
-    out = pd.concat([df1, df2], axis=0)
-    out.to_csv('../data/user_details_all.csv')
+    # df1 = pd.read_csv('../data/raw/top_user_details.csv')
+    # df2 = pd.read_csv('../data/raw/top_user_details2.csv')
+    # out = pd.concat([df1, df2], axis=0)
+    # out.to_csv('../data/user_details_all.csv')
 
     #combine event files into 1
     df = pd.read_csv('./user_events1.csv')
-    for i in range(2,5):
+    for i in range(2,31):
         filename = './user_events' + str(i) + '.csv'
         df_temp = pd.read_csv(filename)
         df = pd.concat([df, df_temp], axis=0)
 
     df_last = pd.read_csv('./user_events_last.csv')
     df = pd.concat([df, df_last])
-    df.to_csv('../data/user_events.csv')
+    df.to_csv('../data/bottom_user_events.csv')
 
     return None
 
@@ -262,7 +275,10 @@ def bucket_events(df, freq='d'):
     return bucket_average
 
     
-def fit_model(df_to_fit, df_to_predict):  #for prelim testing purposes
+def fit_model(df_to_fit):  #for prelim testing purposes
+    '''
+    TODO: clean up and rewrite
+    '''
     #read data
     X = df_to_fit.values
 
@@ -430,6 +446,20 @@ def clustering_approach():
     ac_results = df_clust.iloc[train_ind]
     ac_results['cluster'] = ac_labels
     analyse_preds(ac_results['super'], ac_results['cluster'])
+
+    return None
+
+def do_random_forest(df_in):
+    '''
+    Do a random forest classification
+    IN: dataframe of user details and actions (github events)
+    OUT: results of RF classification to stdout
+    '''
+    names = df_in.pop('user')
+    sup = df_in.pop('super')
+    df_clust = pd.concat((names, sup), axis=1)
+    df_clust['cluster'] = -1
+
 
     return None
 

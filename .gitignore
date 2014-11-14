@@ -1,0 +1,6 @@
+data/
+code/*.ipynb
+code/*.csv
+code/*.pyc
+code/.ipynb_checkpoints/
+code/.spyderworkspace
