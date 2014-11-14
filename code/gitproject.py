@@ -460,6 +460,26 @@ def do_random_forest(df_in):
     df_clust = pd.concat((names, sup), axis=1)
     df_clust['cluster'] = -1
 
+    #read data
+    y=sup
+    X = df_in.values
+
+    #scale data
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=31)
+
+    rf_clf = RandomForestClassifier(n_estimators=100, n_jobs=-1)
+    rf_clf.fit(X_train, y_train)
+    train_preds = rf_clf.predict(X_train)
+    rf_clf.score(X_test, y_test)
+    analyse_preds(y_train, train_preds)
+
+    #out of sample:
+    print '\nTest set: '
+    preds = rf_clf.predict(X_test)
+    analyse_preds(y_test, preds)
 
     return None
 
