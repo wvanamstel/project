@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pylab as plt
+from mpl_toolkits.mplot3d import Axes3D
 import subprocess
 import requests
 import json
@@ -543,6 +544,45 @@ def plot_2D_clusters(data):
 
     return None
 
+def plot_3D_clusters(X):
+    '''
+    Plot 3 clusters in 3 dimensions
+    IN: numpy array; user details/events data
+    OUT: graph to stdout
+    '''
+    reduced_data= PCA(n_components=3).fit_transform(X) #collapse into 3 dimensions
+    kmeans = KMeans(n_clusters=3)
+    kmeans.fit(reduced_data)
+
+    data_with_lab = np.vstack((reduced_data.T, kmeans.labels_)).T
+
+    fig = plt.figure(figsize=(21,13))
+    ax = fig.add_subplot(111, projection='3d')
+
+    i=0
+    for col, mark, lab in [('yellow', 'o', 'Bottom Ability'), ('blue', '^', 'Top Ability'), ('r', '>', 'Middle Ability')]:
+        cluster = data_with_lab[data_with_lab[:,3]==i]
+        ax.scatter(cluster[:,0,], cluster[:,1], cluster[:,2], marker=mark, color=col, label=lab)
+        i+=1
+        
+    centroids = kmeans.cluster_centers_
+    ax.scatter(centroids[:, 0], centroids[:, 1], centroids[:,2],
+                marker='x', s=200, linewidths=5,
+                color='black')
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title('Clustering of GitHub users\' ability', size=24)
+
+    ax.legend(fontsize='xx-large')
+
+    ax.set_xlim(-2, 7)
+    ax.set_ylim(-1, 5)
+    ax.set_zlim(-2, 5)
+    ax.view_init(azim=320, elev=40)
+
+    plt.show()
 
 if __name__ == '__main__':
     print 'Loading data'
