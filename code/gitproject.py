@@ -2,32 +2,30 @@ import pandas as pd
 import numpy as np
 import matplotlib.pylab as plt
 from mpl_toolkits.mplot3d import Axes3D
-import subprocess
 import requests
-import json
 import time
 import csv
 from itertools import chain
-from sklearn.svm import OneClassSVM, SVC
-from sklearn.cross_validation import ShuffleSplit, cross_val_score
-from sklearn.grid_search import GridSearchCV
+from sklearn.cross_validation import ShuffleSplit
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score, confusion_matrix, precision_score, recall_score
-from sklearn.cluster import DBSCAN, AgglomerativeClustering, KMeans
+from sklearn.cluster import AgglomerativeClustering, KMeans
+
 
 def main():
     print 'Loading data'
-    df_user, df_events = load_data('../data/top_user_details_all.csv', '../data/top_user_events.csv')
-    df_user_pred, df_events_pred = load_data('../data/user_details.csv', '../data/user_events.csv')
-    cols = ['user', 'public_repos', 'followers','following','public_gists']
-    df_small = df_user[cols]
-    df_in = pd.merge(df_small, df_events, on='user')
-    df_in = df_in.drop_duplicates()
-    df_in = df_in.iloc[:,1:]    #drop user names
+    df_top_user, df_top_events = load_data('../data/top_user_details.csv',
+                                           '../data/top_user_events.csv')
+    df_user, df_event = load_data('../data/user_details.csv',
+                                  '../data/user_events.csv')
+
+    print 'Constructing data frame'
+    df_in = make_df(df_user, df_event, df_top_user, df_top_events)
+    print df_in.shape
 
     print 'Fitting model'
-    fit_model(df_in)
-
+    #fit_model(df_in)
+    return df_in
 
 def store_super_users(pwd):
     '''
@@ -42,30 +40,31 @@ def store_super_users(pwd):
     data = []
     columns = ['repository', 'user1', 'user2']
     data.append(columns)
-    #get top project contributors
+    # get top project contributors
     for i in range(len(top_projects)):
         print i
         project = top_projects[i]
         owner = top_starred[top_starred['repository_name']==project].repository_owner.unique()[0]
-        url = 'https://api.github.com/repos/' + owner + '/' + project + '/stats/contributors'
+        url = 'https://api.github.com/repos/' + owner + '/' + project \
+              + '/stats/contributors'
         r = requests.get(url, auth=('wvanamstel', pwd))
-        time.sleep(1)   #don't overwhelm the api
+        time.sleep(1)   # don't overwhelm the api
         records = len(r.json())
 
-        #require that a repo has at least 5 contributors to be included
+        # require that a repo has at least 5 contributors to be included
         if records > 5:
             temp = []
             temp.append(project)
-            for i in xrange(1,3):
+            for i in xrange(1, 3):
                 try:
                     temp.append(r.json()[records - i]['author']['login'])
                 except TypeError:
                     continue
             data.append(temp)
 
-    #write super users to csv file
+    # write super users to csv file
     write_to_csv('top_users.csv', data)
-   
+
     return None
 
 
@@ -76,11 +75,12 @@ def get_github_user_data(df, pwd):
     OUT: csv file of user details written to disk
     '''
     users = df.user1.values
-    #second_users = df.user2.values
-    #all_users = np.hstack((top_users, second_users))
+    # second_users = df.user2.values
+    # all_users = np.hstack((top_users, second_users))
 
-    #get the column names, which are the keys of the json dict
-    rndm = requests.get('https://api.github.com/users/mdo', auth=('wvanamstel', pwd))
+    # get the column names, which are the keys of the json dict
+    rndm = requests.get('https://api.github.com/users/mdo',
+                        auth=('wvanamstel', pwd))
     cols = rndm.json().keys()
     data = []
     tmp = [['user']]
@@ -101,13 +101,14 @@ def get_github_user_data(df, pwd):
                 tmp[j] = str(tmp[j])
             except UnicodeError:
                 tmp[j] = ''
-    
+
         data.append(tmp)
 
-    #write to csv
+    # write to csv
     write_to_csv('bottom_user_details2.csv', data)
-  
+
     return None
+
 
 def get_user_events(df, pwd):
     '''
@@ -115,22 +116,24 @@ def get_user_events(df, pwd):
     IN: pandas DataFrame: user names, string: github api password
     OUT: user events in batches of 100 users
     '''
-    #top_users = df.user1.values
-    #second_users = df.user2.values
-    all_users = df.values #np.hstack((top_users, second_users))
+    # top_users = df.user1.values
+    # second_users = df.user2.values
+    all_users = df.values  # np.hstack((top_users, second_users))
 
-    #get data
+    # get data
     data = [['user', 'repo', 'event_type', 'action', 'timestamp', 'public']]
     for i in xrange(all_users.shape[0]):
         if (i % 10 == 0):
             print i
         if (i % 100 == 0):
             write_to_csv('user_events' + str(i/100) + '.csv', data)
-            data = [['user', 'repo', 'event_type', 'action', 'timestamp', 'public']]
+            data = [['user', 'repo', 'event_type', 'action', 'timestamp',
+                     'public']]
 
-        #Access the github api
-        base_url = 'https://api.github.com/users/' + str(all_users[i]) + '/events?page='
-        for j in xrange(1,11):
+        # Access the github api
+        base_url = 'https://api.github.com/users/' + str(all_users[i]) + \
+                    '/events?page='
+        for j in xrange(1, 11):
             url = base_url + str(j)
             try:
                 event_data = requests.get(url, auth=('wvanamstel', pwd))
@@ -152,10 +155,11 @@ def get_user_events(df, pwd):
                     temp.append(event_data.json()[k]['public'])
                     data.append(temp)
 
-    #write to csv
+    # write to csv
     write_to_csv('user_events_last.csv', data)
 
     return None
+
 
 def write_to_csv(filename, data):
     '''
@@ -177,15 +181,15 @@ def stitch_together():
     IN: None
     OUT: csv files written to disk
     '''
-    #combine user details
+    # combine user details
     # df1 = pd.read_csv('../data/raw/top_user_details.csv')
     # df2 = pd.read_csv('../data/raw/top_user_details2.csv')
     # out = pd.concat([df1, df2], axis=0)
     # out.to_csv('../data/user_details_all.csv')
 
-    #combine event files into 1
+    # combine event files into 1
     df = pd.read_csv('./user_events1.csv')
-    for i in range(2,31):
+    for i in range(2, 31):
         filename = './user_events' + str(i) + '.csv'
         df_temp = pd.read_csv(filename)
         df = pd.concat([df, df_temp], axis=0)
@@ -196,34 +200,67 @@ def stitch_together():
 
     return None
 
+
+def make_df(df_user, df_event, df_top_user, df_top_event):
+    '''
+    Make a single data frame for model input
+    IN: dataframe, user details/events
+    OUT: dataframe, combined details and events
+    '''
+    cols = ['user', 'public_repos', 'followers', 'following', 'public_gists']
+    # construct data frame of super users
+    df_small = df_top_user[cols]
+    df_super = pd.merge(df_small, df_top_event, on='user')
+    df_super = df_super.drop_duplicates()
+
+    # construct df containing not super users
+    df_small = df_user[cols]
+    df_no_super = pd.merge(df_small, df_event, on='user')
+    df_no_super = df_no_super.drop_duplicates()
+
+    # label the user as 'super' or not
+    df_super['super'] = 1
+    df_no_super['super'] = 0
+    df_in = pd.concat((df_super, df_no_super), axis=0)
+
+    df_in.public_repos = df_in.public_repos.astype(int)
+    df_in.followers = df_in.followers.astype(int)
+
+    # remove very rare event column
+    if ('TeamAddEvent' in df_in.columns):
+        df_in.drop('TeamAddEvent', axis=1, inplace=True)
+
+    return df_in
+
+
 def load_data(fin_users, fin_events):
     '''
-    Load and preprocess user details and event data 
+    Load and preprocess user details and event data
     IN: string, string: filenames of user details and event files
     OUT: dataframes of cleaned up event and details data
     '''
     df_users = pd.read_csv(fin_users)
     df_events = pd.read_csv(fin_events)
 
-    #clean up data frames
-    df_users = df_users[df_users.public_repos!='False']
-    df_users = df_users[df_users.site_admin!='Not Found']
+    # clean up data frames
+    df_users = df_users[df_users.public_repos != 'False']
+    df_users = df_users[df_users.site_admin != 'Not Found']
+    df_users = df_users[df_users.public_repos!='https://developer.github.com/v3/#rate-limiting']
 
-    #clean up user event data
+    # clean up user event data
     df_events.drop('Unnamed: 0', axis=1, inplace=True)
     df_events.drop('public', axis=1, inplace=True)
-    #clean up repo column
+    # clean up repo column
     temp = df_events['repo'].apply(lambda x: x.rsplit()[-1].rstrip('\'}'))
     df_events.repo = temp.apply(lambda x: x[x.find('/') + 1:])
-    df_events.timestamp = pd.to_datetime(df_events.timestamp)   #convert to date time
+    # convert to date time
+    df_events.timestamp = pd.to_datetime(df_events.timestamp)
 
-    if ('TeamAddEvent' in df_events.columns):
-        df_events.drop('TeamAddEvent', axis=1, inplace=True)
-  
-    #get daily averages of events
+    # get daily averages of events
     df_events = bucket_events(df_events)
 
     return df_users, df_events
+
 
 def bucket_events(df, freq='d'):
     '''
@@ -268,17 +305,6 @@ def fit_model(df_to_fit):  #for prelim testing purposes
         train = X[train_ind]
         test = X[test_ind]
 
-    #clf = OneClassSVM(kernel='rbf', gamma=0.005, nu=0.001)
-    clf = SVC()
-    clf.fit(train)
-    #predict
-    pred_test = clf.predict(test) 
-    true =[1] * pred_test.shape[0]
-    f1 = f1_score(true, pred_test)
-    print f1
-    ac = accuracy_score(true, pred_test)
-    print ac
-
     X_to_pred = df_to_predict.values
     X_to_pred = scaler.fit_transform(X_to_pred)
     predictions = clf.predict(X_to_pred)
@@ -286,39 +312,34 @@ def fit_model(df_to_fit):  #for prelim testing purposes
     return predictions
 
 
-def clustering_approach():
+def clustering_approach(df_top_user, df_top_events, df_user, df_event):
     '''
     Cluster user data using various clustering algos
+    IN: dataframes, details/events from top/other users
     OUT:
     '''
-    df_top_user, df_top_events = g.load_data('../data/top_user_details.csv', '../data/top_user_events.csv')
-    df_user, df_event = g.load_data('../data/user_details.csv', '../data/user_events.csv')
 
-    #remove very rare event column
-    if ('TeamAddEvent' in df_event.columns):
-        df_event.drop('TeamAddEvent', axis=1, inplace=True)
+    # cols = ['user', 'public_repos', 'followers','following','public_gists']
+    # #construct data frame of super users
+    # df_small = df_top_user[cols]
+    # df_super = pd.merge(df_small, df_top_events, on='user')
+    # df_super = df_super.drop_duplicates()
 
-    cols = ['user', 'public_repos', 'followers','following','public_gists']
-    #construct data frame of super users
-    df_small = df_top_user[cols]
-    df_super = pd.merge(df_small, df_top_events, on='user')
-    df_super = df_super.drop_duplicates()
+    # #construct df containing not super users
+    # df_small = df_user[cols]
+    # df_no_super = pd.merge(df_small, df_event, on='user')
+    # df_no_super = df_no_super.drop_duplicates()
 
-    #construct df containing not super users
-    df_small = df_user[cols]
-    df_no_super = pd.merge(df_small, df_event, on='user')
-    df_no_super = df_no_super.drop_duplicates()
+    # #label the user as 'super' or not
+    # df_super['super']=1
+    # df_no_super['super']=0
+    # df_in = pd.concat((df_super, df_no_super), axis=0)
 
-    #label the user as 'super' or not
-    df_super['super']=1
-    df_no_super['super']=0
-    df_in = pd.concat((df_super, df_no_super), axis=0)
-
-    #construct data frame that will hold the true values and preds   
-    names = df_in.pop('user')
-    sup = df_in.pop('super')
-    df_clust = pd.concat((names, sup), axis=1)
-    df_clust['cluster'] = -1
+    # #construct data frame that will hold the true values and preds   
+    # names = df_in.pop('user')
+    # sup = df_in.pop('super')
+    # df_clust = pd.concat((names, sup), axis=1)
+    # df_clust['cluster'] = -1
 
     #read data
     X = df_in.values
