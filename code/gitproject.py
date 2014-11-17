@@ -15,50 +15,25 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score, confusion_matrix, precision_score, recall_score
 from sklearn.cluster import DBSCAN, AgglomerativeClustering, KMeans
 
+def main():
+    print 'Loading data'
+    df_user, df_events = load_data('../data/top_user_details_all.csv', '../data/top_user_events.csv')
+    df_user_pred, df_events_pred = load_data('../data/user_details.csv', '../data/user_events.csv')
+    cols = ['user', 'public_repos', 'followers','following','public_gists']
+    df_small = df_user[cols]
+    df_in = pd.merge(df_small, df_events, on='user')
+    df_in = df_in.drop_duplicates()
+    df_in = df_in.iloc[:,1:]    #drop user names
 
-'''
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-Code is still quite messy and needs to be cleaned up a lot!
-'''
+    print 'Fitting model'
+    fit_model(df_in)
 
-
-
-def plot_pull_requests_merged(df, users):
-    #plots weekly merged pull requests
-    temp = pd.DataFrame()
-    fig = plt.figure()
-    temp['timestamp'] = df[df.a_actor_attributes_login==usr].a_created_at
-    temp['merged_request'] = df[df.a_actor_attributes_login==usr].a_payload_pull_request_merged
-    temp.sort('timestamp', inplace=True)
-
-    #construct a time series object
-    ts = pd.Series(temp.merged_request.values, index=temp.timestamp)
-    ts_res = ts.resample('W', how='sum')
-    ts_res.plot()
-
-    return None
-
-
-def get_followers(user, pwd):
-    base_url = 'https://api.github.com/users/'
-    url = base_url + user
-    r = requests.get(url, auth=('wvanamstel',pwd))
-    #assert r.status_code == 200
-    return r.json()['followers'], r.json()['public_repos']
-
-
-def get_repos(user):
-    base_url = 'https://api.github.com/users/'
-    url = base_url + user + '/repos'
-    r = requests.get(url)
-    assert r.status_code == 200
-    return r.json
 
 def store_super_users(pwd):
     '''
     Get the details from the top users on github defined by the top 2
     contributors to the 1000 most starred projects
-    IN: str, github pwd
+    IN: string: github pwd
     OUT: csv file of top users written to disk
     '''
     top_starred = pd.read_csv('../data/top_projects.csv')
@@ -97,7 +72,7 @@ def store_super_users(pwd):
 def get_github_user_data(df, pwd):
     ''''
     access github api to scrape user data
-    IN: dataframe of user names, github api password (str)
+    IN: pandas dataframe: user names, string: github api password
     OUT: csv file of user details written to disk
     '''
     users = df.user1.values
@@ -137,7 +112,7 @@ def get_github_user_data(df, pwd):
 def get_user_events(df, pwd):
     '''
     Access github api to scrape user event data
-    IN: DataFrame with user names, github api password (str)
+    IN: pandas DataFrame: user names, string: github api password
     OUT: user events in batches of 100 users
     '''
     #top_users = df.user1.values
@@ -185,8 +160,8 @@ def get_user_events(df, pwd):
 def write_to_csv(filename, data):
     '''
     Write intermediate files to csv
-    IN: filename, dataframe of data to be written to csv
-    OUT: csv files
+    IN: string: target filename, pandas dataframe: data to be written to csv
+    OUT: csv files to disk
     '''
     fout = open(filename, 'wb')
     a = csv.writer(fout)
@@ -224,7 +199,7 @@ def stitch_together():
 def load_data(fin_users, fin_events):
     '''
     Load and preprocess user details and event data 
-    IN: filenames of user details and event files
+    IN: string, string: filenames of user details and event files
     OUT: dataframes of cleaned up event and details data
     '''
     df_users = pd.read_csv(fin_users)
@@ -253,7 +228,7 @@ def load_data(fin_users, fin_events):
 def bucket_events(df, freq='d'):
     '''
     Calculate average daily event frequencies
-    IN: dataframe of user event data, time frequency (default is daily)
+    IN: dataframe: user event data, string: time frequency (default is daily)
     OUT: dataframe of average daily event frequency per user 
     '''
     #make dummy variables from the eventtype column
@@ -560,7 +535,8 @@ def plot_3D_clusters(X):
     ax = fig.add_subplot(111, projection='3d')
 
     i=0
-    for col, mark, lab in [('yellow', 'o', 'Bottom Ability'), ('blue', '^', 'Top Ability'), ('r', '>', 'Middle Ability')]:
+    for col, mark, lab in [('yellow', 'o', 'Bottom Ability'), ('blue', '^', 'Top Ability'), 
+                           ('r', '>', 'Middle Ability')]:
         cluster = data_with_lab[data_with_lab[:,3]==i]
         ax.scatter(cluster[:,0,], cluster[:,1], cluster[:,2], marker=mark, color=col, label=lab)
         i+=1
@@ -585,14 +561,4 @@ def plot_3D_clusters(X):
     plt.show()
 
 if __name__ == '__main__':
-    print 'Loading data'
-    df_user, df_events = load_data('../data/top_user_details_all.csv', '../data/top_user_events.csv')
-    df_user_pred, df_events_pred = load_data('../data/user_details.csv', '../data/user_events.csv')
-    cols = ['user', 'public_repos', 'followers','following','public_gists']
-    df_small = df_user[cols]
-    df_in = pd.merge(df_small, df_events, on='user')
-    df_in = df_in.drop_duplicates()
-    df_in = df_in.iloc[:,1:]    #drop user names
-
-    print 'Fitting model'
-    fit_model(df_in)
+    main()
