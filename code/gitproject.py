@@ -6,11 +6,12 @@ import requests
 import time
 import csv
 from itertools import chain
-from sklearn.cross_validation import ShuffleSplit
+from sklearn.cross_validation import ShuffleSplit, train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score, confusion_matrix, precision_score, recall_score
 from sklearn.cluster import AgglomerativeClustering, KMeans
-
+from sklearn.decomposition import PCA
+from sklearn.ensemble import RandomForestClassifier
 
 def main():
     print 'Loading data'
@@ -20,12 +21,20 @@ def main():
                                   '../data/user_events.csv')
 
     print 'Constructing data frame'
-    df_in = make_df(df_user, df_event, df_top_user, df_top_events)
-    print df_in.shape
+    df_full = make_df(df_user, df_event, df_top_user, df_top_events)
+    user_names = df_full.pop('user')
+    labels = df_full.pop('super')
+    columns = df_full.columns.values
 
-    print 'Fitting model'
-    #fit_model(df_in)
-    return df_in
+    print 'Fitting clustering model'
+    clustering_approach(df_full.values, labels)
+
+    print '======================================\n'
+
+    print 'Fitting Random Forest'
+    fit_random_forest(df_full.values, labels, columns)
+
+    return
 
 def store_super_users(pwd):
     '''
@@ -287,116 +296,43 @@ def bucket_events(df, freq='d'):
 
     return bucket_average
 
-    
-def fit_model(df_to_fit):  #for prelim testing purposes
-    '''
-    TODO: clean up and rewrite
-    '''
-    #read data
-    X = df_to_fit.values
 
-    #scale data
-    scaler = StandardScaler()
-    X = scaler.fit_transform(X)
-
-    rs = ShuffleSplit(X.shape[0], n_iter = 1, random_state=31)
-
-    for train_ind, test_ind in rs:
-        train = X[train_ind]
-        test = X[test_ind]
-
-    X_to_pred = df_to_predict.values
-    X_to_pred = scaler.fit_transform(X_to_pred)
-    predictions = clf.predict(X_to_pred)
-
-    return predictions
-
-
-def clustering_approach(df_top_user, df_top_events, df_user, df_event):
+def clustering_approach(X, y):
     '''
     Cluster user data using various clustering algos
     IN: dataframes, details/events from top/other users
     OUT:
     '''
-
-    # cols = ['user', 'public_repos', 'followers','following','public_gists']
-    # #construct data frame of super users
-    # df_small = df_top_user[cols]
-    # df_super = pd.merge(df_small, df_top_events, on='user')
-    # df_super = df_super.drop_duplicates()
-
-    # #construct df containing not super users
-    # df_small = df_user[cols]
-    # df_no_super = pd.merge(df_small, df_event, on='user')
-    # df_no_super = df_no_super.drop_duplicates()
-
-    # #label the user as 'super' or not
-    # df_super['super']=1
-    # df_no_super['super']=0
-    # df_in = pd.concat((df_super, df_no_super), axis=0)
-
-    # #construct data frame that will hold the true values and preds   
-    # names = df_in.pop('user')
-    # sup = df_in.pop('super')
-    # df_clust = pd.concat((names, sup), axis=1)
-    # df_clust['cluster'] = -1
-
-    #read data
-    X = df_in.values
-
-    #scale data and split 
+    #scale data 
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
 
-    rs = ShuffleSplit(X.shape[0], n_iter = 1, random_state=31)
-
-    for train_ind, test_ind in rs:
-        train = X[train_ind]
-        test = X[test_ind]
-
     #KMeans
     km_clf = KMeans(n_clusters=2, n_jobs=6)
-    km_clf.fit(train)
+    km_clf.fit(X)
 
-    train_results = df_clust.iloc[train_ind]
-    train_results['cluster']=km_clf.labels_
-
-    test_labels = km_clf.predict(test)
-    test_results = df_clust.iloc[test_ind]
-    test_results['cluster']=test_labels
-   
     #swap labels as super-users are in cluster 0 (messy!!)
-    test_results[test_results['cluster']==1].shape
-    temp = test_results.cluster.apply(lambda x: 0 if x==1 else 1)
-    test_results.cluster = temp
-    temp = train_results.cluster.apply(lambda x: 0 if x==1 else 1)
-    train_results = temp
-    analyse_preds(train_results['super'], train_results['cluster'])
+    temp = y.apply(lambda x: 0 if x==1 else 1)
+    print '\nKMeans clustering: '
+    analyse_preds(temp, km_clf.labels_)
 
     #Agglomerative clustering
+    print '\nAgglomerative clustering approach: '
     ac_clf = AgglomerativeClustering()
-    ac_labels = ac_clf.fit_predict(train)
-    ac_results = df_clust.iloc[train_ind]
-    ac_results['cluster'] = ac_labels
-    analyse_preds(ac_results['super'], ac_results['cluster'])
+    ac_labels = ac_clf.fit_predict(X)
+    analyse_preds(y, ac_labels)
+
+    #Plot the clusters
+    #plot_3D_clusters(X)
 
     return None
 
-def fit_random_forest(df_in):
+def fit_random_forest(X, y, cols):
     '''
     Do a random forest classification
     IN: dataframe of user details and actions (github events)
     OUT: results of RF classification to stdout
     '''
-    names = df_in.pop('user')
-    sup = df_in.pop('super')
-    df_clust = pd.concat((names, sup), axis=1)
-    df_clust['cluster'] = -1
-
-    #read data
-    y=sup
-    X = df_in.values
-
     #scale data
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
@@ -407,6 +343,7 @@ def fit_random_forest(df_in):
     rf_clf.fit(X_train, y_train)
     train_preds = rf_clf.predict(X_train)
     rf_clf.score(X_test, y_test)
+    print '\n Training set: '
     analyse_preds(y_train, train_preds)
 
     #out of sample:
@@ -416,11 +353,13 @@ def fit_random_forest(df_in):
 
     #feature importances
     #number of followers, daily issue comments and pull requests have most signal
-    feat_imp = pd.DataFrame(np.vstack((df_in.columns.values, rf_clf.feature_importances_))).transpose()
-    feat_imp.sort(columns=1, axis=0, ascending=False)
+    feat_imp = pd.DataFrame(np.vstack((cols, rf_clf.feature_importances_))).transpose()
+    feat_imp = feat_imp.sort(columns=1, axis=0, ascending=False)
+    print '\nFeature importance: '
     print feat_imp
 
     return None
+
 
 def analyse_preds(true, pred):
     '''
@@ -432,6 +371,8 @@ def analyse_preds(true, pred):
     print 'precision: ', precision_score(true, pred)
     print 'recall: ', recall_score(true, pred)
     print 'roc_auc: ', roc_auc_score(true, pred)
+
+    return None
 
 def plot_2D_clusters(data):
     ##############PCA reduction###################
@@ -476,13 +417,13 @@ def plot_2D_clusters(data):
 
     return None
 
-def plot_3D_clusters(X):
+def plot_3D_clusters(data):
     '''
     Plot 3 clusters in 3 dimensions
     IN: numpy array; user details/events data
     OUT: graph to stdout
     '''
-    reduced_data= PCA(n_components=3).fit_transform(X) #collapse into 3 dimensions
+    reduced_data= PCA(n_components=3).fit_transform(data) #collapse into 3 dimensions
     kmeans = KMeans(n_clusters=3)
     kmeans.fit(reduced_data)
 
@@ -516,6 +457,8 @@ def plot_3D_clusters(X):
     ax.view_init(azim=320, elev=40)
 
     plt.show()
+
+    return None
 
 if __name__ == '__main__':
     main()
