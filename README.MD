@@ -8,4 +8,7 @@ The main gitproject.py file contains code using various supervised and unsupervi
 
 Currently, the model differentiates between the two classes of users with a precision of 0.89 and a recall of 0.83 on the test set (25% of the total data set).
 
+To run from the command line:
+> ipython gitproject.py
+
 Next step is to allow an input of a GitHub user name and return how far along this user is in becoming a super user. 
