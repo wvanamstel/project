@@ -32,7 +32,8 @@ def store_super_users(pwd):
     for i in range(len(top_projects)):
         print i
         project = top_projects[i]
-        owner = top_starred[top_starred['repository_name'] == project].repository_owner.unique()[0]
+        owner = top_starred[top_starred['repository_name']
+                            == project].repository_owner.unique()[0]
         url = 'https://api.github.com/repos/' + owner + '/' + project \
               + '/stats/contributors'
         r = requests.get(url, auth=('wvanamstel', pwd))
@@ -187,4 +188,3 @@ def stitch_together():
     df.to_csv('../data/bottom_user_events.csv')
 
     return None
-    
