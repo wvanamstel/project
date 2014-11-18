@@ -1,17 +1,18 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pylab as plt
-from mpl_toolkits.mplot3d import Axes3D
 import requests
 import time
 import csv
 from itertools import chain
-from sklearn.cross_validation import ShuffleSplit, train_test_split
+from sklearn.cross_validation import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import roc_auc_score, confusion_matrix, precision_score, recall_score
+from sklearn.metrics import roc_auc_score, confusion_matrix, precision_score
+from sklearn.metrics import recall_score
 from sklearn.cluster import AgglomerativeClustering, KMeans
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
+import cPickle as pickle
 
 def main():
     print 'Loading data'
@@ -98,7 +99,7 @@ def get_github_user_data(df, pwd):
     data.append(tmp)
 
     for i in xrange(users.shape[0]):
-        if (i % 100 == 0):
+        if i % 100 == 0:
             print i
         tmp = [[users[i]]]
         url = 'https://api.github.com/users/' + str(users[i])
@@ -132,9 +133,9 @@ def get_user_events(df, pwd):
     # get data
     data = [['user', 'repo', 'event_type', 'action', 'timestamp', 'public']]
     for i in xrange(all_users.shape[0]):
-        if (i % 10 == 0):
+        if i % 10 == 0:
             print i
-        if (i % 100 == 0):
+        if i % 100 == 0:
             write_to_csv('user_events' + str(i/100) + '.csv', data)
             data = [['user', 'repo', 'event_type', 'action', 'timestamp',
                      'public']]
@@ -236,7 +237,7 @@ def make_df(df_user, df_event, df_top_user, df_top_event):
     df_in.followers = df_in.followers.astype(int)
 
     # remove very rare event column
-    if ('TeamAddEvent' in df_in.columns):
+    if 'TeamAddEvent' in df_in.columns:
         df_in.drop('TeamAddEvent', axis=1, inplace=True)
 
     return df_in
@@ -254,7 +255,7 @@ def load_data(fin_users, fin_events):
     # clean up data frames
     df_users = df_users[df_users.public_repos != 'False']
     df_users = df_users[df_users.site_admin != 'Not Found']
-    df_users = df_users[df_users.public_repos!='https://developer.github.com/v3/#rate-limiting']
+    df_users = df_users[df_users.public_repos != 'https://developer.github.com/v3/#rate-limiting']
 
     # clean up user event data
     df_events.drop('Unnamed: 0', axis=1, inplace=True)
@@ -275,7 +276,7 @@ def bucket_events(df, freq='d'):
     '''
     Calculate average daily event frequencies
     IN: dataframe: user event data, string: time frequency (default is daily)
-    OUT: dataframe of average daily event frequency per user 
+    OUT: dataframe of average daily event frequency per user
     '''
     #make dummy variables from the eventtype column
     dums = pd.get_dummies(df.event_type)
@@ -283,13 +284,13 @@ def bucket_events(df, freq='d'):
     new = pd.concat((df, dums), axis=1)
     new = new.set_index(new.timestamp.values)
     #preserve the user column
-    new = pd.concat((new.iloc[:,0], new.iloc[:,5:]), axis=1)
+    new = pd.concat((new.iloc[:, 0], new.iloc[:, 5:]), axis=1)
 
     #get the frequency of events per time period (default=daily)
     #compute the average daily event frequency
     bucket_average = pd.DataFrame()#columns=cols)
     for user in new.user.unique():
-        temp = new[new.user==user]
+        temp = new[new.user == user]
         temp2 = pd.DataFrame(np.mean(temp.resample(freq, how='mean'))).transpose()
         temp2['user'] = user
         bucket_average= pd.concat((bucket_average, temp2), axis=0)
@@ -303,7 +304,7 @@ def clustering_approach(X, y):
     IN: dataframes, details/events from top/other users
     OUT:
     '''
-    #scale data 
+    #scale data
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
 
@@ -333,11 +334,13 @@ def fit_random_forest(X, y, cols):
     IN: dataframe of user details and actions (github events)
     OUT: results of RF classification to stdout
     '''
-    #scale data
+    # scale data
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=31)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, 
+                                                        test_size=0.25, 
+                                                        random_state=31)
 
     rf_clf = RandomForestClassifier(n_estimators=100, n_jobs=-1)
     rf_clf.fit(X_train, y_train)
@@ -346,17 +349,21 @@ def fit_random_forest(X, y, cols):
     print '\n Training set: '
     analyse_preds(y_train, train_preds)
 
-    #out of sample:
+    # out of sample:
     print '\nTest set: '
     preds = rf_clf.predict(X_test)
     analyse_preds(y_test, preds)
 
-    #feature importances
-    #number of followers, daily issue comments and pull requests have most signal
+    # feature importances
+    # number of followers, daily issue comments, pull requests have most signal
     feat_imp = pd.DataFrame(np.vstack((cols, rf_clf.feature_importances_))).transpose()
     feat_imp = feat_imp.sort(columns=1, axis=0, ascending=False)
     print '\nFeature importance: '
     print feat_imp
+    
+    print 'Pickling model'
+    with open('model.pkl', 'w') as f:
+        pickle.dump(rf_clf, f)
 
     return None
 
@@ -433,12 +440,12 @@ def plot_3D_clusters(data):
     ax = fig.add_subplot(111, projection='3d')
 
     i=0
-    for col, mark, lab in [('yellow', 'o', 'Bottom Ability'), ('blue', '^', 'Top Ability'), 
+    for col, mark, lab in [('yellow', 'o', 'Bottom Ability'), ('blue', '^', 'Top Ability'),
                            ('r', '>', 'Middle Ability')]:
         cluster = data_with_lab[data_with_lab[:,3]==i]
         ax.scatter(cluster[:,0,], cluster[:,1], cluster[:,2], marker=mark, color=col, label=lab)
         i+=1
-        
+
     centroids = kmeans.cluster_centers_
     ax.scatter(centroids[:, 0], centroids[:, 1], centroids[:,2],
                 marker='x', s=200, linewidths=5,
