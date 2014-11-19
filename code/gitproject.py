@@ -1,12 +1,10 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pylab as plt
 from sklearn.cross_validation import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score, confusion_matrix, precision_score
 from sklearn.metrics import recall_score
 from sklearn.cluster import AgglomerativeClustering, KMeans
-from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
 import cPickle as pickle
 
@@ -151,9 +149,6 @@ class GitHub(object):
         ac_labels = ac_clf.fit_predict(X)
         self.analyse_preds(y, ac_labels)
 
-        # Plot the clusters
-        # plot_3D_clusters()
-
         return None
 
     def fit_random_forest(self):
@@ -213,101 +208,6 @@ class GitHub(object):
 
         return None
 
-    def plot_2D_clusters(self):
-        '''
-        Make a 2D plot with 3 clusters resulting from kmeans clustering
-        '''
-        data = self.df_full.values
-        # PCA reduction
-        reduced_data = PCA(n_components=2).fit_transform(data)
-        kmeans = KMeans(n_clusters=3)
-        kmeans.fit(reduced_data)
-
-        # Step size of the mesh. Decrease to increase the quality of the VQ.
-        h = .02     # point in the mesh [x_min, m_max]x[y_min, y_max].
-
-        # Plot the decision boundary. For that, we will assign a color to each
-        x_min, x_max = reduced_data[:, 0].min()
-        + 1, reduced_data[:, 0].max() - 1
-        y_min, y_max = reduced_data[:, 1].min()
-        + 1, reduced_data[:, 1].max() - 1
-
-        xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
-                             np.arange(y_min, y_max, h))
-
-        # Obtain labels for each point in mesh. Use last trained model.
-        Z = kmeans.predict(np.c_[xx.ravel(), yy.ravel()])
-
-        # Put the result into a color plot
-        Z = Z.reshape(xx.shape)
-        plt.figure(1)
-        plt.clf()
-        plt.imshow(Z, interpolation='nearest',
-                   extent=(xx.min(), xx.max(), yy.min(), yy.max()),
-                   cmap=plt.cm.Paired,
-                   aspect='auto', origin='lower')
-
-        plt.plot(reduced_data[:, 0], reduced_data[:, 1], 'k.', markersize=2)
-        # Plot the centroids as a white X
-        centroids = kmeans.cluster_centers_
-        plt.scatter(centroids[:, 0], centroids[:, 1],
-                    marker='x', s=169, linewidths=3,
-                    color='w', zorder=10)
-        plt.title('K-means clustering of the GitHub PCA reduced user data\n'
-                  'Centroids are marked with white cross')
-        plt.xlim(x_min, x_max)
-        plt.ylim(y_min, y_max)
-        plt.xticks(())
-        plt.yticks(())
-        plt.show()
-
-        return None
-
-    def plot_3D_clusters(self):
-        '''
-        Plot 3 clusters in 3 dimensions
-        IN: numpy array; user details/events data
-        OUT: graph to stdout
-        '''
-        data = self.df_full.values
-
-        # collapse into 3 dimensions
-        reduced_data = PCA(n_components=3).fit_transform(data)
-        kmeans = KMeans(n_clusters=3)
-        kmeans.fit(reduced_data)
-
-        data_with_lab = np.vstack((reduced_data.T, kmeans.labels_)).T
-
-        fig = plt.figure(figsize=(21, 13))
-        ax = fig.add_subplot(111, projection='3d')
-
-        i = 0
-        for col, mark, lab in [('yellow', 'o', 'Bottom Ability'), ('blue', '^',
-                               'Top Ability'), ('r', '>', 'Middle Ability')]:
-            cluster = data_with_lab[data_with_lab[:, 3] == i]
-            ax.scatter(cluster[:, 0], cluster[:, 1], cluster[:, 2],
-                       marker=mark, color=col, label=lab)
-            i += 1
-
-        centroids = kmeans.cluster_centers_
-        ax.scatter(centroids[:, 0], centroids[:, 1], centroids[:, 2],
-                   marker='x', s=200, linewidths=5, color='black')
-
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        ax.set_title('Clustering of GitHub users\' ability', size=24)
-
-        ax.legend(fontsize='xx-large')
-
-        ax.set_xlim(-2, 7)
-        ax.set_ylim(-1, 5)
-        ax.set_zlim(-2, 5)
-        ax.view_init(azim=320, elev=40)
-
-        plt.show()
-
-        return None
 
 if __name__ == '__main__':
     model = GitHub()

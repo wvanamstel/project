@@ -4,7 +4,7 @@ The object of this project is to identify coding talent on GitHub looking at a u
 
 Taking the top 1000 most starred projects on GitHub and using the top 2 contributors to these projects, about 1100 so-called 'super-users' were identified representing top coding talent. In addition, 2200 randomly chosen user profiles having less social activity were used to complete the data set.  Code for this is contained in the helper_functions.py file.
 
-User names were obtained via http://githubarchive.org and Google BigQuery, user details were scraped from github using their API.
+User names were obtained via http://githubarchive.org and Google BigQuery, user details were scraped from github using their API. The SQL queries are in the repo in the sql_queries.txt file.
 
 The main gitproject.py file contains code using various supervised and unsupervised models to investigate the data set printing results to standard out. 
 
@@ -13,4 +13,4 @@ Currently, the model differentiates between the two classes of users with a prec
 To run from the command line:
 > ipython gitproject.py
 
-Next step is to allow an input of a GitHub user name and return how far along this user is in becoming a super user. 
+Next step is to allow an input of a GitHub user name and return how far along this user is in becoming a super user, which is a work in progress in the gitpredict.py file.
