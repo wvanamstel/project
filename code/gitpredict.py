@@ -1,13 +1,12 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Nov 18 18:20:00 2014
-
-@author: w
-"""
 import cPickle as pickle
 import pandas as pd
+import numpy as np
 import requests
 import time
+
+'''
+Work in progress
+'''
 
 
 class GitPredict(object):
@@ -58,7 +57,7 @@ class GitPredict(object):
                     temp.append(event_data.json()[k]['public'])
                     events.append(temp)
                     
-        df_event = df.DataFrame(events)
+        df_event = pd.DataFrame(events)
         # make dummy variables from the eventtype column
         dums = pd.get_dummies(df_event.event_type)
         # cols = dums.columns
@@ -72,8 +71,6 @@ class GitPredict(object):
         bucket_average = pd.DataFrame()  # columns=cols)
         for user in new.user.unique():
             temp = new[new.user == user]
-            temp2 = pd.DataFrame(np.mean(temp.resample(freq, how='mean'))).transpose()
+            temp2 = pd.DataFrame(np.mean(temp.resample('d', how='mean'))).transpose()
             temp2['user'] = user
             bucket_average = pd.concat((bucket_average, temp2), axis=0)
-
-                    
