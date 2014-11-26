@@ -58,19 +58,21 @@ class GitPredict(object):
                     events.append(temp)
                     
         df_event = pd.DataFrame(events)
-        # make dummy variables from the eventtype column
-        dums = pd.get_dummies(df_event.event_type)
-        # cols = dums.columns
-        new = pd.concat((df_event, dums), axis=1)
-        new = new.set_index(new.timestamp.values)
-        # preserve the user column
-        new = pd.concat((new.iloc[:, 0], new.iloc[:, 5:]), axis=1)
 
+        # make dummy variables from the eventtype column
+        dums = pd.get_dummies(df_event.iloc[:,2])
+        cols = dums.columns
+        new = pd.concat((df_event, dums), axis=1)
+        print new.head()
+        new = new.set_index(new.iloc[:,4].values)
+    
+        new = new.iloc[:, 6:]
+
+        print type(new)
         # get the frequency of events per time period (default=daily)
         # compute the average daily event frequency
         bucket_average = pd.DataFrame()  # columns=cols)
-        for user in new.user.unique():
-            temp = new[new.user == user]
-            temp2 = pd.DataFrame(np.mean(temp.resample('d', how='mean'))).transpose()
-            temp2['user'] = user
-            bucket_average = pd.concat((bucket_average, temp2), axis=0)
+        temp = pd.DataFrame(np.mean(new.resample('d', how='mean'))).transpose()
+        temp2['user'] = user
+        bucket_average = pd.concat((bucket_average, temp2), axis=0)
+        
