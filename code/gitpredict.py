@@ -67,8 +67,6 @@ class GitPredict(object):
         new = new.set_index(new.iloc[:,4].values)
     
         new = new.iloc[:, 6:]
-        print new.head()
-        print type(new)
         # get the frequency of events per time period (default=daily)
         # compute the average daily event frequency
         bucket_average = pd.DataFrame()  # columns=cols)
